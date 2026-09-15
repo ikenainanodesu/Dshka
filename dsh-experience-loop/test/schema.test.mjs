@@ -11,7 +11,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { SCHEMAS } from '../lib/surface.mjs'
-import { validateValue } from '../lib/validate.mjs'
+import { checkArgs, validateValue } from '../lib/validate.mjs'
 
 const ANNOTATIONS = new Set(['description', 'title', 'default', 'examples'])
 const CONSTRAINTS = new Set(['type', 'oneOf', 'properties', 'required', 'additionalProperties', 'items', 'enum', 'const'])
@@ -92,4 +92,23 @@ test('nested review entries are validated field by field', () => {
   assert.ok(violations.some((line) => line.includes('experiences[0].type')))
   assert.ok(violations.some((line) => line.includes('experiences[0].summary')))
   assert.ok(violations.some((line) => line.includes('outcomes[0].outcome')))
+})
+
+test('a malformed payload is refused with the syntax error, never repaired', () => {
+  // The shape a real session hit 6 times: a complete payload plus one stray
+  // trailing brace. The harness cannot parse it, so the raw string reaches the
+  // tool — and the model can only fix it in one retry if the error says what
+  // was wrong.
+  const payload = '{"experiences":[{"type":"memory","title":"t","summary":"s"}]}}'
+  const refused = checkArgs(SCHEMAS.REVIEW_PARAMETERS, payload)
+  assert.equal(refused.ok, false, 'a malformed payload must never be accepted')
+  assert.match(refused.violations[0], /did not parse/)
+  assert.match(refused.violations[0], /position/, 'the syntax error is passed through')
+
+  // A well-formed payload that merely arrived double-encoded is still refused,
+  // but for the honest reason.
+  const doubleEncoded = JSON.stringify('{"experiences":[]}')
+  const alsoRefused = checkArgs(SCHEMAS.REVIEW_PARAMETERS, doubleEncoded)
+  assert.equal(alsoRefused.ok, false)
+  assert.match(alsoRefused.violations[0], /arrived as a JSON string/)
 })

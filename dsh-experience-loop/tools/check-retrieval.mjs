@@ -24,6 +24,7 @@ import { resolveConfig } from '../lib/config.mjs'
 import { ExperienceStore } from '../lib/store.mjs'
 import { makeQuery, rankRecords, environmentFit } from '../lib/rank.mjs'
 import { renderRetrievalBlock } from '../lib/render.mjs'
+import { isExposed } from '../lib/skills.mjs'
 import { extractAsk, planInjection, RetrievalState } from '../lib/retrieve.mjs'
 import { projectKeyOf, projectRootOf } from '../lib/util.mjs'
 
@@ -114,6 +115,7 @@ console.log(`cwd            ${effectiveCwd}`)
 console.log(`project root   ${projectRoot}`)
 console.log(`project key    ${projectKey}`)
 console.log(`platform/shell ${env.platform}/${env.shell}`)
+console.log(`exposeSkills   ${config.exposeSkills} (only these are loadable with the skill tool)`)
 if (replay) {
   console.log(`replayed from  ${fromSession}`)
   console.log(`session        ${replay.sessionId}  origin=${replay.origin ?? '(top level)'}`)
@@ -166,7 +168,12 @@ const hits = rankRecords(records, query, {
 })
 console.log()
 console.log(`selected for injection: ${hits.length} (topK ${config.injectTopK}, minScore ${config.injectMinScore})`)
-const block = renderRetrievalBlock(hits, [], config.injectBudgetChars)
+const block = renderRetrievalBlock(hits, [], config.injectBudgetChars, {
+  // Faithful to the hook: the block's claim about which skills the model can
+  // load depends on the exposure mode, so the diagnostic must pass the same
+  // predicate `planInjection` does or it reports a block that cannot happen.
+  canLoad: (record) => isExposed(record, config.exposeSkills),
+})
 console.log()
 console.log(block === '' ? 'WOULD NOT INJECT (nothing passed the floors)' : block)
 console.log()

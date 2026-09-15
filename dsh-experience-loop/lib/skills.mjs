@@ -21,7 +21,15 @@ import { projectKeyOf, projectRootOf } from './util.mjs'
 
 export const PROVIDER_NAME = 'experience-loop'
 
-function isExposed(record, mode) {
+/**
+ * Whether a record is currently reachable through the harness `skill` tool.
+ *
+ * Exported because the retrieval block makes a claim about this and must not
+ * be allowed to guess: `dsh-tool-skill` resolves a requested name against
+ * `ctx.skills.list()` and rejects anything absent, so advertising a skill that
+ * fails this test is a promise the plugin cannot keep.
+ */
+export function isExposed(record, mode) {
   if (mode === 'none') return false
   if (mode === 'all') return true
   return record.status === 'verified'
@@ -75,12 +83,30 @@ export function registerSkillProvider({ ctx, store, config, logger }) {
   const provider = {
     name: PROVIDER_NAME,
     list: async (options) => listCandidates(options),
+    /**
+     * `dsh-tool-skill` reaches `get` by two different routes, and they deserve
+     * different answers:
+     *
+     *   - the model's `skill` tool first resolves the requested name against
+     *     `list()`, so it can only ever ask for something already exposed here;
+     *   - the human's `/skill-name` gesture in `agent/pre-step` calls `get`
+     *     DIRECTLY, bypassing the catalog entirely.
+     *
+     * The second route is the only channel by which an unverified record can be
+     * exercised at all, and therefore the only way a candidate can earn the
+     * observed success that promotes it — without it, `candidate` is absorbing
+     * and a learned skill can never become reusable. So an explicitly named,
+     * non-deprecated record loads; it still never appears in the catalog on its
+     * own. The skill body states its own status, so the human sees what they
+     * got.
+     */
     get: async (candidate) => {
       const id = candidate?.locator?.id
       if (typeof id !== 'string') return undefined
       const record = store.find(id)
       if (!record || record.type !== 'skill' || record.skillName !== candidate.name) return undefined
-      if (!isExposed(record, config.exposeSkills)) return undefined
+      const byName = config.exposeSkills !== 'none' && record.status !== 'deprecated'
+      if (!isExposed(record, config.exposeSkills) && !byName) return undefined
       return {
         ...candidateFor(record, config),
         content: skillBodyMarkdown(record),

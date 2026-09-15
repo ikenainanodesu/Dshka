@@ -151,9 +151,12 @@ export function recordLine(record, maxChars = 220) {
  * @param {object[]} hits - scored records, best first.
  * @param {object[]} notes - extra lines (review nudges, truncation notices).
  * @param {number} budgetChars - hard character budget for the whole block.
+ * @param {object} [options] - `{ canLoad }`: predicate deciding whether a skill
+ *   record is genuinely reachable through the `skill` tool right now.
  * @returns {string} the block, or '' when nothing fits.
  */
-export function renderRetrievalBlock(hits, notes, budgetChars) {
+export function renderRetrievalBlock(hits, notes, budgetChars, options = {}) {
+  const canLoad = options.canLoad
   if (!Array.isArray(hits) || hits.length === 0) return ''
   const header = [
     '<experience_loop_context>',
@@ -182,8 +185,26 @@ export function renderRetrievalBlock(hits, notes, budgetChars) {
     used += line.length + 1
   }
   const skills = hits.filter((hit) => hit.record.type === 'skill' && hit.record.skillName)
-  if (body.length > 0 && skills.length > 0) {
-    const line = `Matching learned skills are loadable with the skill tool: ${skills.map((hit) => hit.record.skillName).join(', ')}`
+  // Only claim a skill is loadable when it actually is. `dsh-tool-skill`
+  // resolves names through the provider's catalog, so a record kept out of that
+  // catalog cannot be loaded by the model no matter what this block says — and
+  // a measured session had this line advertising five learned skills that a
+  // `skill` call would have refused.
+  const loadable = typeof canLoad === 'function' ? skills.filter((hit) => canLoad(hit.record)) : []
+  const inline = skills.filter((hit) => !loadable.includes(hit))
+  if (body.length > 0 && loadable.length > 0) {
+    const line = `Matching learned skills are loadable with the skill tool: ${loadable.map((hit) => hit.record.skillName).join(', ')}`
+    if (used + line.length + 1 <= budgetChars) {
+      body.push(line)
+      used += line.length + 1
+    }
+  }
+  if (body.length > 0 && inline.length > 0) {
+    // Not loadable, but the summary and trigger above are already in context —
+    // so this is a note about the record's standing, not a broken promise.
+    const line = `Learned skill(s) above are advisory only and cannot be loaded yet: ${inline
+      .map((hit) => hit.record.skillName)
+      .join(', ')}`
     if (used + line.length + 1 <= budgetChars) {
       body.push(line)
       used += line.length + 1
@@ -225,6 +246,21 @@ export function renderRecordDetail(record) {
   ]
   if (record.lastUsedAt) lines.push(`- last used: ${record.lastUsedAt}`)
   if (record.skillName) lines.push(`- harness skill name: ${record.skillName}`)
+  // Provenance of the score, so an observation is never mistaken for a
+  // self-report: only the observed tier moves `confidence`, but both are shown.
+  if (record.observedOutcomes) {
+    lines.push(
+      `- observed outcomes: ${record.observedOutcomes.success} ok / ${record.observedOutcomes.failure} failed (not model-reported)`,
+    )
+  }
+  if (record.lastOutcome) {
+    lines.push(
+      `- last outcome: ${record.lastOutcome.signal} (${record.lastOutcome.outcome}) at ${record.lastOutcome.at}`,
+    )
+  }
+  if (record.surfacedCount) {
+    lines.push(`- surfaced in ${record.surfacedCount} turn(s), never scored on that alone`)
+  }
   if (record.supersedes) lines.push(`- supersedes: ${record.supersedes}`)
   if (record.supersededBy) lines.push(`- superseded by: ${record.supersededBy}`)
   if (record.conflictsWith.length > 0) lines.push(`- conflicts with: ${record.conflictsWith.join(', ')}`)
@@ -264,6 +300,12 @@ export function renderDigest(records, state, root) {
     `- by status: candidate ${byStatus.candidate}, verified ${byStatus.verified}, deprecated ${byStatus.deprecated}`,
     `- injections: ${state.injections} (${state.injectionChars} chars)`,
     `- reviews: ${state.reviews}, episodes: ${state.episodes}, conflicts seen: ${state.conflictsSeen}`,
+    `- observed outcomes: ${state.observedSkillUses ?? 0} skill use(s) ok, ${state.observedSkillFailures ?? 0} failed, ${state.observedSurfaced ?? 0} record surface(s)`,
+    ...((state.observedLoadFailures ?? 0) > 0
+      ? [
+          `- WARNING: ${state.observedLoadFailures} skill(s) were offered in a retrieval block but could not be loaded`,
+        ]
+      : []),
     `- redactions applied: ${state.secretsRedacted}`,
     '',
   ]

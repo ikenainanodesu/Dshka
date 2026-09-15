@@ -30,7 +30,8 @@ console.log(rule('1. FIRST TIME — nothing known yet'))
 host.emit('agent/session-start', { agent, source: 'startup' })
 line('records in store', runtime.store.all(runtime.store.lastProjectKey).length)
 const first = await host.preStep({ agent, turn: 1, step: 1, messages: [userMessage(ASK)] })
-line('messages injected', first.messages.length)
+// The batch INCLUDING the caller's own message, so 1 means "nothing was added".
+line('messages in batch (1 = nothing injected)', first.messages.length)
 
 playTurn(host, {
   session: agent.session,

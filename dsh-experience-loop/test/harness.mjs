@@ -201,8 +201,18 @@ export function userMessage(text) {
   }
 }
 
-/** Convenience: emit the event sequence of one turn through the plugin hooks. */
-export function playTurn(host, { session, turn, ask, toolCalls = [], failures = 0, assistantText = '' }) {
+/**
+ * Convenience: emit the event sequence of one turn through the plugin hooks.
+ *
+ * `endReason` is a `TurnEndReason` kind, and the event carries the REAL durable
+ * shape — `reason: { kind }`, not a bare string. The harness used to emit
+ * `reason: 'stop'`, which no version of the schema has ever produced; nothing
+ * read it until observed outcome attribution did.
+ */
+export function playTurn(
+  host,
+  { session, turn, ask, toolCalls = [], failures = 0, assistantText = '', endReason = 'completed' },
+) {
   host.emit('session/event', session, { type: 'turn/start', data: { turn }, seq: 0, time: Date.now() })
   if (ask) {
     host.emit('session/event', session, {
@@ -215,7 +225,7 @@ export function playTurn(host, { session, turn, ask, toolCalls = [], failures = 
   let calls = 0
   for (const call of toolCalls) {
     calls += 1
-    const callId = `call-${turn}-${calls}`
+    const callId = call.callId ?? `call-${turn}-${calls}`
     host.emit('session/event', session, {
       type: 'tool/call',
       data: { turn, step: 1, callId, name: call.name, arguments: call.arguments ?? '{}' },
@@ -228,7 +238,12 @@ export function playTurn(host, { session, turn, ask, toolCalls = [], failures = 
       data: {
         turn,
         step: 1,
-        message: { role: 'user', content: [{ type: 'tool_result', callId, isError }], source: { kind: 'tool', callId } },
+        message: {
+          role: 'user',
+          content: [{ type: 'tool_result', callId, isError }],
+          source: { kind: 'tool', callId },
+        },
+        ...(call.errorCode !== undefined ? { error: { name: call.name, code: call.errorCode } } : {}),
       },
       seq: 0,
       time: Date.now(),
@@ -242,5 +257,25 @@ export function playTurn(host, { session, turn, ask, toolCalls = [], failures = 
       time: Date.now(),
     })
   }
-  host.emit('session/event', session, { type: 'turn/end', data: { turn, reason: 'stop' }, seq: 0, time: Date.now() })
+  host.emit('session/event', session, {
+    type: 'turn/end',
+    data: { turn, reason: { kind: endReason } },
+    seq: 0,
+    time: Date.now(),
+  })
+}
+
+/** Emit a user-invoked `/skill-name` gesture the way `dsh-tool-skill` does. */
+export function playSkillGesture(host, { session, turn, skillName }) {
+  host.emit('session/event', session, {
+    type: 'user/message',
+    data: {
+      id: `msg-${Math.random().toString(36).slice(2)}`,
+      role: 'user',
+      content: [{ type: 'text', text: `/${skillName}` }],
+      source: { kind: 'skill-invocation', name: skillName, form: 'instructions' },
+    },
+    seq: 0,
+    time: Date.now(),
+  })
 }

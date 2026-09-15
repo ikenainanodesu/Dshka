@@ -143,6 +143,7 @@ On the `experience-loop` row of your profile patch. Every field is optional.
     promoteSuccesses: 2
     deprecateConfidence: 0.15
     autoDeprecate: true
+    observeOutcomes: true      # credit observed skill use / turn outcome (see below)
 ```
 
 ---
@@ -325,6 +326,65 @@ create → candidate ──(2 successes, or confidence ≥ 0.7, or /experience v
 
 ---
 
+## Closing the loop without asking the model
+
+`/experience metric` aside, the loop has a second input that does not depend on
+anyone volunteering anything: **observed outcomes** (`observeOutcomes`, on by
+default).
+
+The problem it solves was measured, not imagined. In a real 45-turn project
+session the agent called `experience_review` 25 times, but only **3** of those
+calls carried an `outcomes` field. Confidence moves *only* through an outcome,
+so 23 of 24 records sat at `candidate` with `useCount` 0 forever — including a
+skill the agent had itself refined to version 2. The loop was write-only.
+
+So the plugin now credits evidence it already sees in the durable session event
+stream, at zero extra model calls and zero extra context:
+
+| Signal | Source | Scores? |
+|---|---|---|
+| Skill loaded, turn ended `completed` | `tool/call` named `skill`, or a `/skill-name` gesture | **success** — moves confidence, can promote |
+| Skill loaded, turn ended `error` | as above | **failure** — moves confidence, can deprecate |
+| Skill loaded, turn `aborted` / `interrupted` / `blocked` / `max-tokens` | as above | no — a user hitting stop is not evidence about a record |
+| Record merely appeared in an injected block | the retrieval block | **no** — `surfacedCount` only |
+
+The last row is the important refusal. Exposure is not use, and "the turn
+finished" has no discriminating power: 41 of 43 closed turns in that measured
+session ended `completed`, so scoring it would have promoted essentially
+everything and made `verified` mean nothing. That counter exists so an operator
+can see the loop moving and spot records that keep surfacing without ever being
+picked up — not so the scoreboard looks busy.
+
+Every observed outcome is labelled as such (`observed:skill-used`,
+`observed:skill-failed`), so a self-report and an observation are never confused:
+
+```sh
+/experience show <id>
+# - observed outcomes: 2 ok / 0 failed (not model-reported)
+# - last outcome: observed:skill-used (success) at <timestamp>
+# - surfaced in 7 turn(s), never scored on that alone
+```
+
+### Why a skill can be loaded by name before it is verified
+
+`dsh-tool-skill` resolves a requested name against the provider's **catalog**
+and rejects anything absent, so a record hidden from the catalog cannot be
+loaded by anyone — which would make promotion unreachable, since promotion is
+what puts a skill in the catalog. The deadlock is broken on the human's side
+only:
+
+- `list()` — the catalog the model sees — still contains **only** what
+  `exposeSkills` allows (`verified` by default), so context cost and the
+  model's exposure to unverified advice are unchanged;
+- `get()` — reached *directly* by the human's `/skill-name` gesture — serves any
+  non-deprecated record, and the returned body states its own status.
+
+So a human can exercise a candidate by name, that exercise is observed, and two
+successful ones promote it into the catalog where the model can then load it.
+Nothing else about exposure changed.
+
+---
+
 ## Measuring whether it works
 
 `/experience metric` — or `experience_query {action:"metric"}` — compares the
@@ -339,8 +399,9 @@ Reduction: 58.1%
 ```
 
 Other observable counters in `/experience stats`: injections and injected
-characters, reviews, records created/merged/rejected, success and failure
-outcome reports, conflicts seen, sensitive spans redacted.
+characters, reviews, records created/merged/rejected, model-reported success and
+failure outcomes, **observed** skill uses and failures, records merely surfaced,
+advertised-but-unloadable skills, conflicts seen, sensitive spans redacted.
 
 > This metric becomes meaningful only after the same kind of task has actually
 > been performed more than once in the same environment. Until then it says so.
@@ -398,6 +459,8 @@ failure-mode table) written so another agent can take over.
 | `test/rank.test.mjs` | environment gate, scoring order, **long-request relevance regression**, reliability smoothing, similarity, repeat metric |
 | `test/redact.test.mjs` | every credential rule, and the "useful lesson mentioning a credential survives" case |
 | `test/store.test.mjs` | round trip, scope separation, forget-project, journal append-only, hand-edited files, malformed files, audit + digest |
+| `test/slate.test.mjs` | terse replies: positional forms (number, letter, ordinal in en/zh/ja/ko), decorated labels, unique fragments, and failing closed on ambiguity |
+| `test/outcome.test.mjs` | observed outcomes: an observed skill use promoting a record and making it loadable; a failed turn counting against it; `aborted`/`interrupted`/`max-tokens` scoring nothing; a failed skill load being reported rather than credited; the `/skill-name` gesture; surfacing never scoring; single-settle; disable switch; the injected block making no false loadability claim |
 | `test/schema.test.mjs` | tool schemas stay inside the host-supported JSON Schema subset the registry asserts |
 
 ---
@@ -409,7 +472,7 @@ failure-mode table) written so another agent can take over.
 | `agent/session-start` | Learn the project context; register per-session cleanup |
 | `agent/pre-step` (`{prepend:true}` waterfall) | Retrieval. Prepended so `next()` yields the final claimed batch from every other contributor; appends exactly one `recall`-form plugin message |
 | `user-questions/request` (waterfall) | Observe a question the agent posed — its option labels and the answer — then delegate with `next()`. Pure observation: never claims, answers, or delays a question. This is what gives a one-letter reply an exact referent |
-| `session/event` | Deterministic evidence capture into `episodes.jsonl` |
+| `session/event` | Deterministic evidence capture into `episodes.jsonl`, and observed outcome attribution (skill loads, turn-end reason) |
 | `session/flush` | Durability |
 | `ctx.effect` | Flush on unload; dispose the skill provider |
 
@@ -425,6 +488,15 @@ before the tools SDK), `ctx.skills.registerProvider` ×1, `ctx.provide('experien
   `experience_review`, nothing is distilled; the episode journal still records
   the evidence and `/experience pending` shows it. There is no background
   consolidator (deliberately: no LLM calls inside the plugin, no recursion).
+- **A learned skill still cannot be loaded by the model until it is verified.**
+  `dsh-tool-skill` resolves a name against the provider's catalog, so with
+  `exposeSkills: verified` (the default) a candidate is invisible to the model
+  no matter what retrieval says about it. Observed outcomes can promote it, but
+  only once something has exercised it — for a fresh candidate that something is
+  the human's `/skill-name` gesture or `/experience verify`. Raising exposure
+  (`exposeSkills: all`) removes the gate at the cost of listing every candidate
+  in every request's catalog; that trade is deliberately left to the operator
+  rather than made silently by the plugin.
 - **Keyword scoring, not embeddings.** Accurate for the vocabulary-overlap case
   this system targets, and free; it will miss a relevant record that shares no
   vocabulary with the request. Relevance is a *saturating function of the

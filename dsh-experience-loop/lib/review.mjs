@@ -345,6 +345,45 @@ function applyOutcome(record, outcome, config) {
 }
 
 /**
+ * Apply one OBSERVED outcome — evidence the plugin saw on the session event
+ * stream rather than a claim a model made about itself.
+ *
+ * It funnels into the same `applyOutcome` the model-reported path uses, so the
+ * promotion gate and the auto-deprecation rule keep exactly one implementation.
+ * What differs is only what gets recorded alongside: the signal that produced
+ * it, so a human reading `experiences.json` can tell an observation from a
+ * self-report instead of trusting both equally.
+ *
+ * @param {object} options - `{ store, record, outcome, signal, sessionId, turn, config }`.
+ * @returns {{ status: string, confidence: number, promoted: boolean }}
+ */
+export function applyObservedOutcome({ store, record, outcome, signal, sessionId, turn, config }) {
+  const before = { status: record.status, confidence: record.confidence }
+  applyOutcome(record, outcome === 'failure' ? 'failure' : 'success', config)
+  const counts = record.observedOutcomes ?? { success: 0, failure: 0 }
+  if (outcome === 'failure') counts.failure += 1
+  else counts.success += 1
+  record.observedOutcomes = counts
+  record.lastOutcome = { signal, outcome, at: nowIso(), sessionId, turn }
+  store.put(record)
+  store.audit({
+    action: 'outcome',
+    source: 'observed',
+    signal,
+    recordId: record.id,
+    sessionId,
+    turn,
+    before,
+    after: { status: record.status, confidence: record.confidence },
+  })
+  return {
+    status: record.status,
+    confidence: record.confidence,
+    promoted: before.status !== 'verified' && record.status === 'verified',
+  }
+}
+
+/**
  * Apply one review payload.
  * @param {object} options - `{ store, payload, context, config, logger }`.
  * @returns {object} a structured outcome report.

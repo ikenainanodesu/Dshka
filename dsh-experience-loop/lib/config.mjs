@@ -40,6 +40,7 @@ const KNOWN_KEYS = new Set([
   'promoteSuccesses',
   'deprecateConfidence',
   'autoDeprecate',
+  'observeOutcomes',
   'logLevel',
 ])
 
@@ -134,6 +135,14 @@ export function resolveConfig(input) {
     promoteSuccesses: Math.round(num(raw.promoteSuccesses, 2, 1, 50)),
     deprecateConfidence: num(raw.deprecateConfidence, 0.15, 0, 0.9),
     autoDeprecate: bool(raw.autoDeprecate, true),
+    /**
+     * Credit outcomes the plugin OBSERVES on the session event stream — a
+     * learned skill actually being loaded, and how the turn that loaded it
+     * ended. Model-reported `outcomes` are rare in practice, and without this
+     * the promotion gate is unreachable. See lib/outcome.mjs for exactly which
+     * signals score and which are recorded but deliberately neutral.
+     */
+    observeOutcomes: bool(raw.observeOutcomes, true),
 
     logLevel: ['debug', 'info', 'warn', 'error'].includes(raw.logLevel) ? raw.logLevel : 'info',
   }

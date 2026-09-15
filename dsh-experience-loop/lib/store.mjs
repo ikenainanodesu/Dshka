@@ -329,6 +329,21 @@ export class ExperienceStore {
     return candidates.length === 1 ? candidates[0] : undefined
   }
 
+  /**
+   * Look up a `type === 'skill'` record by its exact harness skill name across
+   * every scope. Exact only: an observed outcome must name the record it is
+   * attributing, so a prefix or fuzzy match would be a silent misattribution.
+   */
+  findBySkillName(name) {
+    if (typeof name !== 'string' || name === '') return undefined
+    for (const state of this.scopes.values()) {
+      for (const record of state.records.values()) {
+        if (record.type === 'skill' && record.skillName === name) return record
+      }
+    }
+    return undefined
+  }
+
   // ── mutation ───────────────────────────────────────────────────────────────
 
   put(record) {

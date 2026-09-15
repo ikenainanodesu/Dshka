@@ -34,7 +34,8 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { resolveConfig, PLUGIN_NAME } from './lib/config.mjs'
 import { ExperienceStore } from './lib/store.mjs'
-import { applyReview, EpisodeRecorder } from './lib/review.mjs'
+import { applyObservedOutcome, applyReview, EpisodeRecorder } from './lib/review.mjs'
+import { OutcomeLedger } from './lib/outcome.mjs'
 import { environmentOf, extractAsk, planInjection, RetrievalState } from './lib/retrieve.mjs'
 import { answerToRequest, buildSlate, resolveReply } from './lib/slate.mjs'
 import { registerSkillProvider } from './lib/skills.mjs'
@@ -138,6 +139,35 @@ class ExperienceRuntime {
      */
     this.posedQuestions = new Map()
     this.skillBridge = { invalidate() {}, dispose() {} }
+    /**
+     * Observed outcome attribution. The model-reported `outcomes` field of a
+     * review is rare in practice (3 of 25 reviews in a measured session), so
+     * this credits the plugin's own observations — a skill actually loaded and
+     * how the turn that loaded it ended — through the same promotion gate.
+     */
+    this.outcomes = new OutcomeLedger({
+      config,
+      store,
+      logger,
+      apply: ({ record, outcome, signal, sessionId, turn }) => {
+        const result = applyObservedOutcome({ store, record, outcome, signal, sessionId, turn, config })
+        // Persist at once: a promotion that exists only in memory could be lost
+        // to a kill, and the whole point of observing it is that it took effect.
+        try {
+          store.flush()
+        } catch (error) {
+          logger?.warn?.('experience-loop: flush after observed outcome failed: %s', error?.message ?? error)
+        }
+        if (result.promoted) {
+          logger?.info?.(
+            'experience-loop: %s promoted to verified by an observed outcome (%s)',
+            record.id,
+            signal,
+          )
+        }
+        return result
+      },
+    })
     this.recorder = new EpisodeRecorder({
       config,
       logger,
@@ -489,9 +519,15 @@ class ExperienceRuntime {
           '',
           `Injections: ${state.injections} (${state.injectionChars} chars)`,
           `Reviews: ${state.reviews} · created ${state.recordsCreated} · merged ${state.recordsMerged} · rejected ${state.recordsRejected}`,
-          `Outcome reports: ${state.outcomesSuccess} ok / ${state.outcomesFailure} failed`,
+          `Outcome reports: ${state.outcomesSuccess} ok / ${state.outcomesFailure} failed (model-reported)`,
+          `Observed outcomes: ${state.observedSkillUses ?? 0} skill use(s) ok / ${state.observedSkillFailures ?? 0} failed · ${state.observedSurfaced ?? 0} record surface(s), scored only for skill use`,
+          ...((state.observedLoadFailures ?? 0) > 0
+            ? [
+                `  WARNING: ${state.observedLoadFailures} skill(s) were offered in a retrieval block but could not be loaded`,
+              ]
+            : []),
+          `Learning: skills exposed as ${this.config.exposeSkills} (max ${this.config.maxExposedSkills}) · observed attribution ${this.config.observeOutcomes ? 'on' : 'off'}`,
           `Conflicts seen: ${state.conflictsSeen} · sensitive spans redacted: ${state.secretsRedacted}`,
-          `Exposed as harness skills: ${this.config.exposeSkills} (max ${this.config.maxExposedSkills})`,
         ].join('\n')
         return { action: 'stats', count: all.length, text, records: [] }
       }
@@ -766,6 +802,13 @@ export function apply(ctx, rawConfig) {
         // matched, so the journal can identify a short reply as a task.
         if (result.query !== '') runtime.turnQuery.set(sessionId, result.query)
         if (result.text === '') return decision
+        // Hand the ledger what this block surfaced, so the turn can later be
+        // settled against how it ended.
+        runtime.outcomes.noteInjection(
+          sessionId,
+          turn,
+          result.hits.map((hit) => hit.record.id),
+        )
         return { kind: 'enter', messages: [...decision.messages, pluginMessage(result.text, 'recall')] }
       } catch (error) {
         logger?.warn?.('experience-loop: retrieval failed: %s', error?.message ?? error)
@@ -787,6 +830,7 @@ export function apply(ctx, rawConfig) {
       runtime.lastAssistantText.delete(String(agent.session.id))
       runtime.turnQuery.delete(String(agent.session.id))
       runtime.posedQuestions.delete(String(agent.session.id))
+      runtime.outcomes.forget(String(agent.session.id))
     }, 'experience-loop.sessionCleanup')
   })
 
@@ -828,11 +872,15 @@ export function apply(ctx, rawConfig) {
       runtime.noteAssistantText(String(session.id), text)
     }
     if (config.captureEpisodes) runtime.recorder.observe(session, event)
+    // Observed outcomes ride the same stream, but stay a separate concern: the
+    // recorder writes evidence about a TURN, the ledger scores a RECORD.
+    runtime.outcomes.observe(session, event)
   })
 
   // ── hook 3: durability ─────────────────────────────────────────────────────
   ctx.on('session/flush', () => {
     try {
+      runtime.outcomes.flushCounters()
       if (store.dirty.size > 0) store.flush()
     } catch (error) {
       logger?.warn?.('experience-loop: flush failed: %s', error?.message ?? error)
@@ -842,6 +890,7 @@ export function apply(ctx, rawConfig) {
   ctx.effect(
     () => () => {
       try {
+        runtime.outcomes.flushCounters()
         store.flush()
       } catch (error) {
         logger?.warn?.('experience-loop: final flush failed: %s', error?.message ?? error)
@@ -851,12 +900,13 @@ export function apply(ctx, rawConfig) {
   )
 
   logger?.info?.(
-    'experience-loop: ready (store=%s, retrieval=%s/%d, learning=%s, skills=%s)',
+    'experience-loop: ready (store=%s, retrieval=%s/%d, learning=%s, skills=%s, observed outcomes=%s)',
     config.storeRoot,
     config.inject ? 'on' : 'off',
     config.injectTopK,
     config.learn ? 'on' : 'off',
     config.exposeSkills,
+    config.observeOutcomes ? 'on' : 'off',
   )
 }
 

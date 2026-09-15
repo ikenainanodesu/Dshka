@@ -8,6 +8,7 @@
 
 import { makeQuery, rankRecords } from './rank.mjs'
 import { renderRetrievalBlock } from './render.mjs'
+import { isExposed } from './skills.mjs'
 import { projectKeyOf, projectRootOf } from './util.mjs'
 import { tokenize } from './util.mjs'
 import { PLUGIN_NAME } from './config.mjs'
@@ -200,7 +201,11 @@ export function planInjection({
       )
     }
 
-    const text = renderRetrievalBlock(hits, notes, config.injectBudgetChars)
+    const text = renderRetrievalBlock(hits, notes, config.injectBudgetChars, {
+      // The block may only call a learned skill loadable when the provider's
+      // catalog actually contains it.
+      canLoad: (record) => isExposed(record, config.exposeSkills),
+    })
     if (text === '') continue
 
     state.record(sessionId, turn, hits.map((hit) => hit.record.id))

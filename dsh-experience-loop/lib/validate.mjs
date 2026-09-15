@@ -102,6 +102,23 @@ export function validateValue(node, value, path = '', violations = []) {
  */
 export function checkArgs(schema, args) {
   if (args === null || typeof args !== 'object' || Array.isArray(args)) {
+    // A malformed payload reaches here as the RAW string, because the harness
+    // could not parse it. Say WHY rather than only that it was not an object:
+    // a measured session lost 6 of 25 `experience_review` calls to one stray
+    // trailing brace, and the model can fix that in one retry if it is told the
+    // syntax error. The payload is never repaired here — guessing at malformed
+    // JSON is how a validator starts accepting things nobody wrote.
+    if (typeof args === 'string') {
+      try {
+        JSON.parse(args)
+        return { ok: false, violations: ['arguments must be a JSON object (it arrived as a JSON string)'] }
+      } catch (error) {
+        return {
+          ok: false,
+          violations: [`arguments must be a JSON object; the JSON did not parse: ${error?.message ?? error}`],
+        }
+      }
+    }
     return { ok: false, violations: ['arguments must be a JSON object'] }
   }
   const violations = validateValue(schema, args, '', [])
