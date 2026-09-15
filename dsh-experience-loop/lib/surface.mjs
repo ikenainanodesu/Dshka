@@ -266,6 +266,10 @@ const QUERY_OUTPUT = {
       type: 'object',
       additionalProperties: false,
       properties: {
+        episodesAnalysed: { type: 'integer' },
+        episodesSkipped: { type: 'integer' },
+        episodesSkippedShort: { type: 'integer' },
+        episodesSkippedTruncated: { type: 'integer' },
         repeatedTaskGroups: { type: 'integer' },
         firstRunAverageToolCalls: { type: 'number' },
         laterRunAverageToolCalls: { type: 'number' },

@@ -109,58 +109,113 @@ export class RetrievalState {
 
 /**
  * Decide and render the injection for one step.
- * @param {object} options - `{ store, session, turn, messages, config, state, logger }`.
- * @returns {{ text: string, hits: object[], reason: string }}
+ *
+ * Retrieval is TWO-PASS, and there is deliberately no "is this a reply?"
+ * threshold. A shape test (character or token count) is an arbitrary constant
+ * that both misses real replies and discards real short requests; what matters
+ * is whether the user's own words can FIND anything:
+ *
+ *   pass 1 — the request alone. A normal request resolves here and nothing else
+ *            is even computed, so a long prompt is never diluted by context.
+ *   pass 2 — only if pass 1 found nothing, retry with the REFERENT attached:
+ *            the canonical option the reply selected (when the agent posed a
+ *            choice, so the candidate set was known), and/or the preceding
+ *            assistant turn. This is decided by OUTCOME, not by shape.
+ *
+ * @param {object} options - `{ store, session, turn, messages, config, state, logger, conversationContext, resolvedReply, posedRequest }`.
+ *   `resolvedReply` is `{ question, labels }` from `lib/slate.mjs` when the
+ *   reply was matched against a question the agent posed; `posedRequest` is the
+ *   request text recovered from a question the UI answered directly (buttons,
+ *   or free text handed back as `custom`).
+ * @returns {{ text: string, hits: object[], reason: string, query: string }}
  */
-export function planInjection({ store, session, turn, messages, config, state, logger }) {
-  const empty = { text: '', hits: [], reason: '' }
+export function planInjection({
+  store,
+  session,
+  turn,
+  messages,
+  config,
+  state,
+  logger,
+  conversationContext = '',
+  resolvedReply = undefined,
+  posedRequest = '',
+}) {
+  const empty = { text: '', hits: [], reason: '', query: '' }
   if (!config.inject) return { ...empty, reason: 'retrieval disabled' }
 
-  const ask = extractAsk(messages)
-  if (ask.trim().length < 12) return { ...empty, reason: 'not a substantive request' }
+  const rawAsk = extractAsk(messages).trim()
+  if (rawAsk === '' && posedRequest === '') return { ...empty, reason: 'no request text in this step' }
 
   const sessionId = String(session.id)
-  if (!state.shouldAttempt(sessionId, turn)) return { ...empty, reason: 'cooldown or cap' }
+  if (!state.shouldAttempt(sessionId, turn)) return { ...empty, reason: 'cooldown or cap', query: rawAsk }
 
   const env = environmentOf(session)
   store.setProject(env.projectKey, env.projectPath)
   const records = store.all(env.projectKey)
-  if (records.length === 0) return { ...empty, reason: 'store is empty' }
+  if (records.length === 0) return { ...empty, reason: 'store is empty', query: rawAsk }
 
-  const query = makeQuery({ text: ask, env, config })
-  if (query.tokens.size === 0) return { ...empty, reason: 'no usable query tokens' }
+  // Pass 1: the request in the user's own words (or the answer the UI handed
+  // back for a question, which IS the request). Nothing else yet.
+  const attempts = []
+  const direct = rawAsk !== '' ? rawAsk : posedRequest
+  if (rawAsk !== '') attempts.push({ via: 'request', text: rawAsk })
+  if (posedRequest !== '' && posedRequest !== rawAsk) attempts.push({ via: 'posed-answer', text: posedRequest })
 
-  const hits = rankRecords(records, query, {
-    limit: config.injectTopK,
-    minScore: config.injectMinScore,
-    // Two shared meaningful tokens minimum. Relevance is intentionally a
-    // saturating function of the overlap COUNT (see lib/rank.mjs), because a
-    // long, detailed task prompt must not score lower than a one-line one.
-    minOverlap: 2,
-    minRelevance: 0.18,
-  })
-  if (hits.length === 0) return { ...empty, reason: 'nothing scored above threshold' }
-
-  const pending = store.pendingEpisodes(5, sessionId)
-  const notes = []
-  if (pending.length > 0 && config.learn) {
-    notes.push(
-      `You have ${pending.length} unreviewed turn(s) in this session. If you learned something durable here, call experience_review once before finishing.`,
-    )
+  // Pass 2 candidates: the same request with its referent made explicit.
+  const referents = []
+  if (resolvedReply !== undefined && Array.isArray(resolvedReply.labels) && resolvedReply.labels.length > 0) {
+    referents.push(`${resolvedReply.question ?? ''} → ${resolvedReply.labels.join('; ')}`)
+  }
+  if (conversationContext !== '') referents.push(conversationContext)
+  if (referents.length > 0) {
+    const anchor = rawAsk !== '' ? rawAsk : posedRequest
+    attempts.push({ via: 'resolved', text: `${referents.join('\n')}\n${anchor}` })
   }
 
-  const text = renderRetrievalBlock(hits, notes, config.injectBudgetChars)
-  if (text === '') return { ...empty, reason: 'budget too small' }
+  let lastQuery = direct
+  for (const attempt of attempts) {
+    const query = makeQuery({ text: attempt.text, env, config })
+    lastQuery = attempt.text
+    // Two tokens is the floor for a matchable request, because `minOverlap` is 2
+    // as well: anything below it could not match regardless of scoring.
+    if (query.tokens.size < 2) continue
 
-  state.record(sessionId, turn, hits.map((hit) => hit.record.id))
-  store.bumpCounters({ injections: 1, injectionChars: text.length })
-  logger?.debug?.(
-    'experience-loop: injected %d record(s) (%d chars) for turn %d',
-    hits.length,
-    text.length,
-    turn,
-  )
-  return { text, hits, reason: 'injected' }
+    const hits = rankRecords(records, query, {
+      limit: config.injectTopK,
+      minScore: config.injectMinScore,
+      // Two shared meaningful tokens minimum. Relevance is intentionally a
+      // saturating function of the overlap COUNT (see lib/rank.mjs), because a
+      // long, detailed task prompt must not score lower than a one-line one.
+      minOverlap: 2,
+      minRelevance: 0.18,
+    })
+    if (hits.length === 0) continue
+
+    const pending = store.pendingEpisodes(5, sessionId)
+    const notes = []
+    if (pending.length > 0 && config.learn) {
+      notes.push(
+        `You have ${pending.length} unreviewed turn(s) in this session. If you learned something durable here, call experience_review once before finishing.`,
+      )
+    }
+
+    const text = renderRetrievalBlock(hits, notes, config.injectBudgetChars)
+    if (text === '') continue
+
+    state.record(sessionId, turn, hits.map((hit) => hit.record.id))
+    store.bumpCounters({ injections: 1, injectionChars: text.length })
+    logger?.debug?.(
+      'experience-loop: injected %d record(s) (%d chars) for turn %d via the %s query',
+      hits.length,
+      text.length,
+      turn,
+      attempt.via,
+    )
+    return { text, hits, reason: `injected (${attempt.via} query)`, query: attempt.text }
+  }
+
+  return { ...empty, reason: 'nothing scored above threshold', query: lastQuery }
 }
 
 export { tokenize }

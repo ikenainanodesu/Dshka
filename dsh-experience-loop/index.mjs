@@ -35,7 +35,8 @@ import { dirname } from 'node:path'
 import { resolveConfig, PLUGIN_NAME } from './lib/config.mjs'
 import { ExperienceStore } from './lib/store.mjs'
 import { applyReview, EpisodeRecorder } from './lib/review.mjs'
-import { environmentOf, planInjection, RetrievalState } from './lib/retrieve.mjs'
+import { environmentOf, extractAsk, planInjection, RetrievalState } from './lib/retrieve.mjs'
+import { answerToRequest, buildSlate, resolveReply } from './lib/slate.mjs'
 import { registerSkillProvider } from './lib/skills.mjs'
 import {
   buildTools,
@@ -114,6 +115,28 @@ class ExperienceRuntime {
      * @type {Map<string, Set<string>>}
      */
     this.turnRecords = new Map()
+    /**
+     * Tail of the last assistant message per session. A short user reply only
+     * means something relative to what it answers, so this is the context a
+     * one-letter answer is resolved against.
+     * @type {Map<string, string>}
+     */
+    this.lastAssistantText = new Map()
+    /**
+     * The request as retrieval saw it, per session, for the current turn.
+     * @type {Map<string, string>}
+     */
+    this.turnQuery = new Map()
+    /**
+     * The last question this agent POSED, per session, plus the answer it got.
+     *
+     * When the agent offers a choice the candidate set is known, so a reply like
+     * "C" has an explicit referent and needs no guessing. Held until the next
+     * request arrives, because the user may answer a posed question as an
+     * ordinary chat message rather than through the question UI.
+     * @type {Map<string, {slate: object[], posedRequest: string, at: string}>}
+     */
+    this.posedQuestions = new Map()
     this.skillBridge = { invalidate() {}, dispose() {} }
     this.recorder = new EpisodeRecorder({
       config,
@@ -125,7 +148,53 @@ class ExperienceRuntime {
         this.turnRecords.delete(sessionId)
         return [...ids]
       },
+      takeQuery: (sessionId) => {
+        const query = this.turnQuery.get(sessionId)
+        this.turnQuery.delete(sessionId)
+        return query ?? ''
+      },
     })
+  }
+
+  /** Remember the tail of one assistant message, for resolving short replies. */
+  noteAssistantText(sessionId, text) {
+    if (typeof text !== 'string' || text.trim() === '') return
+    this.lastAssistantText.set(sessionId, truncate(text, this.config.askContextChars))
+    if (this.lastAssistantText.size > 64) {
+      const oldest = this.lastAssistantText.keys().next().value
+      if (oldest !== sessionId) this.lastAssistantText.delete(oldest)
+    }
+  }
+
+  /**
+   * Remember a question this agent posed and the answer it received, so a reply
+   * can be resolved against the ACTUAL candidate set instead of guessed at.
+   *
+   * Observation only: `user-questions/request` is a waterfall and this plugin
+   * calls `next()`, so it never claims, answers, or delays a question.
+   */
+  notePosedQuestion(agent, questions, answer) {
+    const sessionId = agent?.session ? String(agent.session.id) : undefined
+    if (sessionId === undefined) return
+    const slate = buildSlate(questions)
+    if (slate.length === 0) return
+    this.posedQuestions.set(sessionId, {
+      slate,
+      posedRequest: answerToRequest(answer, slate),
+      at: nowIso(),
+    })
+    if (this.posedQuestions.size > 64) {
+      const oldest = this.posedQuestions.keys().next().value
+      if (oldest !== sessionId) this.posedQuestions.delete(oldest)
+    }
+  }
+
+  /** Consume the pending posed question for one session, if any. */
+  takePosedQuestion(sessionId) {
+    const entry = this.posedQuestions.get(sessionId)
+    if (entry === undefined) return undefined
+    this.posedQuestions.delete(sessionId)
+    return entry
   }
 
   attachSkillBridge(bridge) {
@@ -344,12 +413,27 @@ class ExperienceRuntime {
         }
       }
       case 'metric': {
-        const metric = computeRepeatMetric(this.store.recentEpisodes(2000))
+        const metric = computeRepeatMetric(this.store.recentEpisodes(2000), { askCap: this.config.episodeAskChars })
+        const caveatParts = []
+        if (metric.episodesSkippedShort > 0) {
+          caveatParts.push(
+            `${metric.episodesSkippedShort} turn(s) carrying no wording to identify the task (a short reply counts only when the preceding turn it answered was recorded)`,
+          )
+        }
+        if (metric.episodesSkippedTruncated > 0) {
+          caveatParts.push(
+            `${metric.episodesSkippedTruncated} turn(s) whose request was truncated for the journal, so their retained opening is boilerplate rather than the task`,
+          )
+        }
+        const caveat =
+          caveatParts.length > 0
+            ? `\n(not compared: ${caveatParts.join('; ')}.)`
+            : ''
         const text =
           metric.repeatedTaskGroups === 0
-            ? 'Not enough repeated tasks yet. A task counts once the same request signature has been seen at least twice.'
+            ? `Not enough comparable repeats yet. A task counts once the same request has been seen at least twice in the same workspace, with enough untruncated wording to recognise it.${caveat}`
             : [
-                `Repeated task groups: ${metric.repeatedTaskGroups}`,
+                `Repeated task groups: ${metric.repeatedTaskGroups}  (from ${metric.episodesAnalysed} comparable turn(s))`,
                 `First run average tool calls: ${metric.firstRunAverageToolCalls}`,
                 `Later runs average tool calls: ${metric.laterRunAverageToolCalls}`,
                 `Reduction: ${metric.reductionPercent}%`,
@@ -358,15 +442,19 @@ class ExperienceRuntime {
                   .slice(0, 12)
                   .map(
                     (row) =>
-                      `- ${row.runs}× "${row.example}" first ${row.firstToolCalls} → later ${row.laterAverageToolCalls} (${row.delta >= 0 ? '+' : ''}${row.delta})`,
+                      `- ${row.runs}× ${row.isReply ? '(reply to) ' : ''}"${row.example}" first ${row.firstToolCalls} → later ${row.laterAverageToolCalls} (${row.delta >= 0 ? '+' : ''}${row.delta})`,
                   ),
-              ].join('\n')
+              ].join('\n') + caveat
         return {
           action,
           count: metric.repeatedTaskGroups,
           text,
           records: [],
           metric: {
+            episodesAnalysed: metric.episodesAnalysed,
+            episodesSkipped: metric.episodesSkipped,
+            episodesSkippedShort: metric.episodesSkippedShort,
+            episodesSkippedTruncated: metric.episodesSkippedTruncated,
             repeatedTaskGroups: metric.repeatedTaskGroups,
             firstRunAverageToolCalls: metric.firstRunAverageToolCalls,
             laterRunAverageToolCalls: metric.laterRunAverageToolCalls,
@@ -646,6 +734,21 @@ export function apply(ctx, rawConfig) {
       const origin = agent?.session?.header?.origin
       if (origin === 'subagent' && !config.injectSubagents) return decision
       try {
+        const sessionId = String(agent.session.id)
+        // A reply like "C" is a real request whose meaning lives in the question
+        // it answers. If this agent actually posed that question, the candidate
+        // set is known — resolve against it instead of guessing. The stash is
+        // consumed here because it belongs to the request that just arrived.
+        const posed = runtime.takePosedQuestion(sessionId)
+        const rawAsk = extractAsk(decision.messages).trim()
+        const resolution = posed === undefined ? { outcome: 'none', labels: [] } : resolveReply(posed.slate, rawAsk)
+        if (resolution.outcome === 'ambiguous') {
+          logger?.info?.(
+            'experience-loop: reply %j matches more than one option of %j; not guessing — a clarification should be asked',
+            rawAsk,
+            posed?.slate?.[0]?.question ?? '',
+          )
+        }
         const result = planInjection({
           store,
           session: agent.session,
@@ -654,7 +757,14 @@ export function apply(ctx, rawConfig) {
           config,
           state: runtime.retrieval,
           logger,
+          // Pass 2 material, used ONLY when the user's own words found nothing.
+          conversationContext: runtime.lastAssistantText.get(sessionId) ?? '',
+          resolvedReply: resolution.outcome === 'selected' ? resolution : undefined,
+          posedRequest: posed?.posedRequest ?? '',
         })
+        // Remember what this turn was actually ABOUT, whether or not anything
+        // matched, so the journal can identify a short reply as a task.
+        if (result.query !== '') runtime.turnQuery.set(sessionId, result.query)
         if (result.text === '') return decision
         return { kind: 'enter', messages: [...decision.messages, pluginMessage(result.text, 'recall')] }
       } catch (error) {
@@ -674,12 +784,49 @@ export function apply(ctx, rawConfig) {
       runtime.recorder.forget(String(agent.session.id))
       runtime.lastTurn.delete(String(agent.session.id))
       runtime.turnRecords.delete(String(agent.session.id))
+      runtime.lastAssistantText.delete(String(agent.session.id))
+      runtime.turnQuery.delete(String(agent.session.id))
+      runtime.posedQuestions.delete(String(agent.session.id))
     }, 'experience-loop.sessionCleanup')
+  })
+
+  // ── hook 2b: the candidate set of a question this agent posed ──────────────
+  // `user-questions/request` is a waterfall. This listener observes and then
+  // delegates with `next()`: it never claims the question, answers it, or adds
+  // latency the user would notice. What it buys is the REFERENT a short reply
+  // needs — when the agent offers "A / B / C", a reply of "C" stops being a
+  // guess and becomes a lookup against a known option list.
+  ctx.on('user-questions/request', async (request, next) => {
+    const answer = await next()
+    try {
+      runtime.notePosedQuestion(request?.agent, request?.questions, answer)
+      const labels = (answer?.answers ?? [])
+        .flatMap((entry) => (Array.isArray(entry?.selected) ? entry.selected : []))
+        .filter((label) => typeof label === 'string' && label !== '')
+      const custom = (answer?.answers ?? []).filter((entry) => typeof entry?.custom === 'string' && entry.custom !== '')
+      if (labels.length > 0 || custom.length > 0) {
+        logger?.debug?.(
+          'experience-loop: recorded a posed question (%d option set(s)); answer was %s',
+          buildSlate(request?.questions).length,
+          labels.length > 0 ? `${labels.length} canonical label(s)` : 'free text',
+        )
+      }
+    } catch (error) {
+      logger?.warn?.('experience-loop: could not record a posed question: %s', error?.message ?? error)
+    }
+    return answer
   })
 
   ctx.on('session/event', (session, event) => {
     if (!runtime.enabled) return
     if (event?.type === 'turn/start') runtime.noteTurn(session, event.data.turn)
+    if (event?.type === 'assistant/message') {
+      const content = event.data?.message?.content
+      const text = (Array.isArray(content) ? content : [])
+        .map((block) => (block?.type === 'text' && typeof block.text === 'string' ? block.text : ''))
+        .join('\n')
+      runtime.noteAssistantText(String(session.id), text)
+    }
     if (config.captureEpisodes) runtime.recorder.observe(session, event)
   })
 

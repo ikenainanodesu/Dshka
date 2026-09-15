@@ -608,6 +608,101 @@ test('every review outcome path returns a value its own schema accepts', async (
   }
 })
 
+test('a one-letter answer to a posed question is still a request', async () => {
+  // Regression: short replies were dropped as "not a substantive request", so
+  // the turns where a stored lesson matters most — the user picking an option —
+  // got no retrieval at all. A reply's meaning lives in the question it answers.
+  const { root, host, runtime, agent } = boot()
+  try {
+    host.emit('agent/session-start', { agent, source: 'startup' })
+    await host.runTool('experience_review', { experiences: [DOCKER_SKILL] }, { agent })
+
+    // The agent finishes a turn by offering a choice.
+    playTurn(host, {
+      session: agent.session,
+      turn: 1,
+      ask: 'the docker service is down again, what should we do?',
+      toolCalls: [{ name: 'pwsh', arguments: '{"command":"docker ps -a"}' }],
+      assistantText:
+        'Which option do you want? A) restart the container. B) read the docker logs. C) check the host port conflict, then restart the service and verify the healthcheck.',
+    })
+
+    const decision = await host.preStep({ agent, turn: 2, step: 1, messages: [userMessage('C')] })
+    assert.equal(decision.messages.length, 2, 'the single-letter answer must still retrieve')
+    const block = decision.messages[1]?.content?.[0]?.text ?? ''
+    assert.match(block, /<experience_loop_context>/)
+    assert.match(block, /Docker service recovery/, 'the QUESTION vocabulary is what matches')
+
+    // With nothing to resolve against, a bare letter really is unusable.
+    const fresh = makeAgent({ sessionId: 'session-without-context' })
+    host.emit('agent/session-start', { agent: fresh, source: 'startup' })
+    const none = await host.preStep({ agent: fresh, turn: 1, step: 1, messages: [userMessage('C')] })
+    assert.equal(none.messages.length, 1)
+    // …and the resolved request is what the journal records as the turn's subject.
+    host.emit('session/event', agent.session, { type: 'turn/start', data: { turn: 2 }, seq: 0, time: Date.now() })
+    host.emit('session/event', agent.session, { type: 'user/message', data: userMessage('C'), seq: 0, time: Date.now() })
+    host.emit('session/event', agent.session, { type: 'turn/end', data: { turn: 2, reason: 'stop' }, seq: 0, time: Date.now() })
+    const episode = runtime.store.recentEpisodes(5).find((entry) => entry.turn === 2)
+    assert.ok(episode, 'the reply turn must be journalled')
+    assert.equal(episode.ask, 'C', 'the raw words are stored unchanged')
+    assert.match(episode.askContext ?? '', /port conflict/, 'the resolved context must be journalled too')
+  } finally {
+    cleanup(root)
+  }
+})
+
+test('a posed choice gives a one-letter reply an exact referent', async () => {
+  // The referent, not a threshold, is what makes "C" resolvable. With the option
+  // set known the reply is a LOOKUP; without it the same letter is a guess.
+  const { root, host, runtime, agent } = boot()
+  try {
+    host.emit('agent/session-start', { agent, source: 'startup' })
+    await host.runTool('experience_review', { experiences: [DOCKER_SKILL] }, { agent })
+
+    // Control: the same letter with no posed question and no prior turn.
+    const fresh = makeAgent({ sessionId: 'session-no-slate' })
+    host.emit('agent/session-start', { agent: fresh, source: 'startup' })
+    const bare = await host.preStep({ agent: fresh, turn: 1, step: 1, messages: [userMessage('C')] })
+    assert.equal(bare.messages.length, 1, 'without a referent a bare letter must find nothing')
+
+    // The agent poses a choice. The user answers in the chat instead of through
+    // the question UI, so the answerer reports no selection — but the option set
+    // is recorded all the same.
+    const returned = await host.askUserQuestion(
+      {
+        agent,
+        questions: [
+          {
+            id: 'q1',
+            question: 'The docker service is down again — which approach?',
+            options: [
+              { label: 'A) restart the container' },
+              { label: 'B) read the docker logs first' },
+              { label: 'C) check the host port conflict, then restart the service and verify the healthcheck' },
+            ],
+          },
+        ],
+      },
+      { answers: [] },
+    )
+    assert.deepEqual(returned, { answers: [] }, 'the observer must delegate the answer unchanged')
+
+    const decision = await host.preStep({ agent, turn: 2, step: 1, messages: [userMessage('C')] })
+    assert.equal(decision.messages.length, 2, 'the letter must resolve against the option set')
+    assert.match(decision.messages[1].content[0].text, /Docker service recovery/)
+
+    // Close the turn so the journal shows WHAT the letter was taken to mean.
+    host.emit('session/event', agent.session, { type: 'turn/start', data: { turn: 2 }, seq: 0, time: Date.now() })
+    host.emit('session/event', agent.session, { type: 'user/message', data: userMessage('C'), seq: 0, time: Date.now() })
+    host.emit('session/event', agent.session, { type: 'turn/end', data: { turn: 2, reason: 'stop' }, seq: 0, time: Date.now() })
+    const episode = runtime.store.recentEpisodes(5).find((entry) => entry.turn === 2)
+    assert.equal(episode.ask, 'C')
+    assert.match(episode.askContext ?? '', /port conflict/, 'the canonical option is what got resolved')
+  } finally {
+    cleanup(root)
+  }
+})
+
 test('the query tool answers every action with schema-valid output', async () => {
   const { root, host, runtime, agent } = boot()
   try {

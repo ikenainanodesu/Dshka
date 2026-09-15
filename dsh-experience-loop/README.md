@@ -132,6 +132,7 @@ On the `experience-loop` row of your profile patch. Every field is optional.
     captureEpisodes: true      # write the per-turn evidence journal
     episodeRetention: 400
     episodeAskChars: 400
+    askContextChars: 1200      # how much of the previous assistant turn may serve as referent
     exposeSkills: verified     # verified | all | none
     maxExposedSkills: 25
     skillDescriptionChars: 300
@@ -143,6 +144,61 @@ On the `experience-loop` row of your profile patch. Every field is optional.
     deprecateConfidence: 0.15
     autoDeprecate: true
 ```
+
+---
+
+## Short replies: no threshold, an explicit referent instead
+
+A user answering a multiple-choice question may reply with a single character
+(`C`), and a short confirmation (`好`, `用 B`) is just as real. Such a reply is a
+**complete request whose meaning lives in what it answers**, so the plugin never
+treats it as noise — and it does **not** decide by shape. A character or token
+count is an arbitrary constant that both misses real replies and discards real
+short requests. Retrieval is **two-pass**, and the decision is made by outcome:
+
+```
+pass 1  the request in the user's own words
+        └─ found something → done. Nothing else is even computed, so a long
+           prompt is never diluted by context.
+pass 2  only if pass 1 found nothing, retry with the REFERENT attached:
+        · the canonical OPTION the reply selected, when the agent posed a
+          choice — the candidate set is known, so this is a lookup
+        · the preceding assistant turn, as the weaker fallback
+```
+
+The referent comes from the harness itself. `ctx.userQuestions` dispatches the
+**`user-questions/request`** waterfall carrying `questions[].options[].label`,
+and `ask_user_question` returns the answer with `selected: string[]` (canonical
+labels) or `custom` (free text). The plugin subscribes, **observes, and delegates
+with `next()`** — it never claims, answers, or delays a question. Matching then
+follows a deterministic ladder, in `lib/slate.mjs`:
+
+```
+bare number · letter (A/B/C) · ordinal (1st, first, 第三, 3번, 세번째)
+  → exact label, ignoring enumerations and decorations like (recommended)
+    → unique distinctive fragment
+      0 matches → nothing (fall back to the conversation)
+      ≥2 matches → FAIL CLOSED, never a guess
+```
+
+The pattern is the one NousResearch/hermes-agent uses for its native `clarify`
+prompts ([issue #96954](https://github.com/NousResearch/hermes-agent/issues/96954)):
+deterministic, no model call, ambiguous input refused rather than guessed, and
+the **canonical option text** returned rather than the user's abbreviation.
+The letter tier is an addition that fits this harness, where the Web UI labels
+choices `A / B / C`.
+
+Cost: **zero extra model tokens** — nothing new is sent, and the option set is
+already in the transcript as the `ask_user_question` call's arguments. The only
+effect is that a turn which today is skipped may now inject, bounded by the same
+`injectTopK` / `injectBudgetChars` / `injectMaxPerSession` caps.
+
+The journal keeps the user's exact words in `ask` **and** the resolved form in
+`askContext`, so a one-letter answer stays identifiable as a task later — even
+after compaction has hidden the question itself.
+
+Skipping short requests outright — the first implementation — disabled retrieval
+for exactly the turns where a stored lesson would matter most.
 
 ---
 
@@ -352,6 +408,7 @@ failure-mode table) written so another agent can take over.
 |---|---|
 | `agent/session-start` | Learn the project context; register per-session cleanup |
 | `agent/pre-step` (`{prepend:true}` waterfall) | Retrieval. Prepended so `next()` yields the final claimed batch from every other contributor; appends exactly one `recall`-form plugin message |
+| `user-questions/request` (waterfall) | Observe a question the agent posed — its option labels and the answer — then delegate with `next()`. Pure observation: never claims, answers, or delays a question. This is what gives a one-letter reply an exact referent |
 | `session/event` | Deterministic evidence capture into `episodes.jsonl` |
 | `session/flush` | Durability |
 | `ctx.effect` | Flush on unload; dispose the skill provider |

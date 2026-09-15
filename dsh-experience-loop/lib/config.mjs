@@ -29,6 +29,7 @@ const KNOWN_KEYS = new Set([
   'captureEpisodes',
   'episodeRetention',
   'episodeAskChars',
+  'askContextChars',
   'exposeSkills',
   'maxExposedSkills',
   'skillDescriptionChars',
@@ -103,6 +104,16 @@ export function resolveConfig(input) {
     captureEpisodes: bool(raw.captureEpisodes, true),
     episodeRetention: Math.round(num(raw.episodeRetention, 400, 20, 5000)),
     episodeAskChars: Math.round(num(raw.episodeAskChars, 400, 60, 4000)),
+    /**
+     * How much of the preceding assistant turn may be used as retrieval
+     * REFERENT — the second-pass material tried only when the user's own words
+     * found nothing. There is deliberately no "is this a reply?" threshold: a
+     * shape test is an arbitrary constant that both misses real replies and
+     * discards real short requests. What a reply needs is an explicit referent,
+     * which comes from the question the agent posed (see lib/slate.mjs) or,
+     * failing that, from this text.
+     */
+    askContextChars: Math.round(num(raw.askContextChars, 1200, 0, 8000)),
 
     exposeSkills,
     maxExposedSkills: Math.round(num(raw.maxExposedSkills, 25, 0, 200)),

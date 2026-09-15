@@ -174,6 +174,70 @@ test('the repeat metric compares first runs with later runs of the same signatur
   assert.ok(metric.reductionPercent > 0)
 })
 
+test('the repeat metric refuses to compare turns that cannot be identified as one task', () => {
+  // Every rule here was forced by real data: the first version of this metric
+  // reported three "repeated tasks", of which one was six unrelated turns (five
+  // with an EMPTY ask plus a stray "C") and one was two different subagent tasks
+  // that merely shared a mandated boilerplate preamble.
+  const at = (day) => `2026-01-${String(day).padStart(2, '0')}T00:00:00Z`
+  const ask = 'fix the docker health check failure now'
+
+  // (a) a bare reply with no recorded question cannot identify a task
+  const junk = [
+    { ask: '', toolCallCount: 16, startedAt: at(1) },
+    { ask: 'C', toolCallCount: 5, startedAt: at(2) },
+    { ask: '', toolCallCount: 9, startedAt: at(3) },
+  ]
+  const a = computeRepeatMetric(junk)
+  assert.equal(a.repeatedTaskGroups, 0, 'an unidentifiable turn must not form a repeated task')
+  assert.equal(a.episodesSkippedShort, 3)
+
+  // (a2) …but the SAME reply IS comparable through its resolved context: two
+  // answers to one question are the same task, even when both are "C".
+  const answered = (calls, day) => ({
+    ask: 'C',
+    askContext: 'Which option do you want? A) restart the container. C) check the host port conflict, then restart the service.',
+    cwd: 'D:\\a',
+    toolCallCount: calls,
+    startedAt: at(day),
+  })
+  const a2 = computeRepeatMetric([answered(12, 1), answered(4, 2)])
+  assert.equal(a2.repeatedTaskGroups, 1, 'a repeated reply is a repeated task once resolved')
+  assert.equal(a2.firstRunAverageToolCalls, 12)
+  assert.equal(a2.laterRunAverageToolCalls, 4)
+  assert.equal(a2.rows[0].isReply, true)
+  assert.match(a2.rows[0].example, /port conflict/, 'a bare letter must never be the reported example')
+
+  // (b) a request TRUNCATED for the journal keeps only boilerplate, so it
+  // cannot identify the task — the cap and the recorded length both disqualify.
+  const padded = (tail) => ({ ask: `${'x'.repeat(400)} ${tail}`, toolCallCount: 50, startedAt: at(1) })
+  const truncated = [
+    { ...padded('alpha'), askChars: 500, toolCallCount: 47, startedAt: at(1) },
+    { ...padded('beta'), askChars: 520, toolCallCount: 59, startedAt: at(2) },
+  ]
+  const b = computeRepeatMetric(truncated, { askCap: 400 })
+  assert.equal(b.repeatedTaskGroups, 0, 'a truncated request must not identify a task')
+  assert.equal(b.episodesSkippedTruncated, 2)
+
+  // (c) the same words in another workspace are a different task
+  const cross = [
+    { ask, cwd: 'D:\\a', toolCallCount: 20, startedAt: at(1) },
+    { ask, cwd: 'D:\\b', toolCallCount: 3, startedAt: at(2) },
+  ]
+  assert.equal(computeRepeatMetric(cross).repeatedTaskGroups, 0)
+
+  // (d) …and the genuine repeat IS still compared, first against later
+  const same = [
+    { ask, cwd: 'D:\\a', toolCallCount: 20, startedAt: at(1) },
+    { ask, cwd: 'D:\\a', toolCallCount: 3, startedAt: at(2) },
+  ]
+  const d = computeRepeatMetric(same)
+  assert.equal(d.repeatedTaskGroups, 1)
+  assert.equal(d.firstRunAverageToolCalls, 20)
+  assert.equal(d.laterRunAverageToolCalls, 3)
+  assert.equal(d.reductionPercent, 85)
+})
+
 test('task signature is stable across restatements', () => {
   const a = taskSignature({ ask: 'fix the docker health check failure' })
   const b = taskSignature({ ask: 'the docker health check failure again' })

@@ -64,16 +64,21 @@ function looksLikeCorrection(text) {
  */
 export class EpisodeRecorder {
   /**
-   * @param {object} options - `{ config, logger, onEpisode, takeRecordLinks }`.
+   * @param {object} options - `{ config, logger, onEpisode, takeRecordLinks, takeQuery }`.
    *   `takeRecordLinks(sessionId)` returns (and consumes) the ids of records
    *   distilled during the session's current turn, so the evidence line can
    *   point back at them.
+   *   `takeQuery(sessionId)` returns (and consumes) the RESOLVED request for
+   *   that turn — for a short reply, the question it answered plus the reply.
+   *   The raw words stay in `ask`; the resolved form is what makes a one-letter
+   *   answer identifiable as a task.
    */
-  constructor({ config, logger, onEpisode, takeRecordLinks }) {
+  constructor({ config, logger, onEpisode, takeRecordLinks, takeQuery }) {
     this.config = config
     this.logger = logger
     this.onEpisode = onEpisode
     this.takeRecordLinks = takeRecordLinks
+    this.takeQuery = takeQuery
     /** @type {Map<string, Map<number, object>>} */
     this.turns = new Map()
     /**
@@ -202,6 +207,12 @@ export class EpisodeRecorder {
     } catch (error) {
       this.logger?.warn?.('experience-loop: record linkage failed: %s', error?.message ?? error)
     }
+    let resolvedQuery = ''
+    try {
+      resolvedQuery = this.takeQuery?.(sessionId) ?? ''
+    } catch (error) {
+      this.logger?.warn?.('experience-loop: query resolution failed: %s', error?.message ?? error)
+    }
     const episode = {
       id: newId('ep'),
       sessionId,
@@ -210,6 +221,16 @@ export class EpisodeRecorder {
       startedAt: state.startedAt,
       endedAt: nowIso(),
       ask: ask.text,
+      // Original length, so a reader can tell a whole request from a truncated
+      // one. Long delegated prompts get cut at `episodeAskChars`, and their
+      // retained prefix is usually shared boilerplate — comparing such turns as
+      // "the same task" produced a false pair that looked like a regression.
+      askChars: state.ask.length,
+      askTruncated: state.ask.length > this.config.episodeAskChars,
+      // The request as RETRIEVAL saw it: unchanged for a normal request, or
+      // "preceding assistant turn + reply" when the user answered a question
+      // with something as short as a single letter.
+      askContext: resolvedQuery === '' ? undefined : truncate(resolvedQuery, 1200),
       askRedactions: ask.hits,
       extraAsks: Math.max(0, state.asks - 1),
       toolCallCount: state.tools.length,

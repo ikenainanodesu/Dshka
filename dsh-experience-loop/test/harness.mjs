@@ -145,6 +145,22 @@ export function createFakeHost() {
       }
       return dispatch()
     },
+    /**
+     * Run the `user-questions/request` waterfall. `answer` is what the real
+     * answerer would return; a listener that observes and delegates must hand
+     * that value straight back.
+     */
+    async askUserQuestion(request, answer = { answers: [] }) {
+      const chain = [...(listeners.get('user-questions/request') ?? [])]
+      let index = -1
+      const dispatch = async () => {
+        index += 1
+        const entry = chain[index]
+        if (!entry) return answer
+        return entry.handler(request, dispatch)
+      }
+      return dispatch()
+    },
     async runTool(toolName, args, exec = {}) {
       const tool = tools.get(toolName)
       if (!tool) throw new Error(`tool ${toolName} is not registered`)

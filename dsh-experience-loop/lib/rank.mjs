@@ -335,38 +335,112 @@ export function mergeRecord(target, incoming, options = {}) {
 
 // ── repeat-task KPI metric ───────────────────────────────────────────────────
 
-/** The stable vocabulary signature of a turn's request, used to group repeats. */
+/**
+ * A request needs at least this many meaningful tokens to be comparable at all.
+ *
+ * Below it there is nothing to identify the task by. The important case is a
+ * SHORT REPLY — a multiple-choice answer such as "C", or "好" — which is a
+ * completely legitimate request but carries no identifying wording of its own.
+ * Such a turn is only comparable through its RESOLVED form (the question it
+ * answered plus the reply), which the recorder stores as `askContext`; without
+ * that, grouping them would merge unrelated answers and produce a first/later
+ * comparison that means nothing.
+ */
+const MIN_TASK_TOKENS = 3
+
+/**
+ * Two requests are the same task when their FULL token sets overlap this much.
+ *
+ * Compared against the whole set rather than a truncated signature, because a
+ * signature built from a handful of alphabetically-first tokens is dominated by
+ * shared boilerplate: two completely different subagent prompts that both began
+ * "你在 Windows 仓库 C:\work\example-project 里工作…" were reported as
+ * one repeated task that "got worse".
+ */
+const TASK_CLUSTER_SIMILARITY = 0.5
+
+/**
+ * Vocabulary signature of a turn's request, for display and for cheap tests.
+ * Returns '' when the request is too short to be comparable.
+ */
 export function taskSignature(episode, size = 6) {
   const tokens = [...tokenize(episode?.ask ?? '')]
     .filter((token) => token.length > 1)
     .sort()
-  return tokens.slice(0, size).join('+') || 'unknown'
+  if (tokens.length < MIN_TASK_TOKENS) return ''
+  return tokens.slice(0, size).join('+')
 }
 
 /**
- * The plugin's headline claim, measured rather than asserted: for every task
- * signature seen more than once, how does the first run compare with the runs
- * that followed?
+ * The plugin's headline claim, measured rather than asserted: for repeats of
+ * the same task, how does the first run compare with the runs that followed?
+ *
+ * Grouping is deliberately conservative, because a KPI that invents repeats is
+ * worse than no KPI:
+ *   - requests with fewer than {@link MIN_TASK_TOKENS} tokens are skipped, not
+ *     lumped together;
+ *   - requests are clustered by full-set Jaccard, not by a truncated signature;
+ *   - clustering never crosses workspaces — the same words in another project
+ *     are a different task, and its tool-call counts are not comparable.
+ *
  * @param {object[]} episodes - journal entries, oldest first.
- * @returns {object} per-signature and aggregate comparison.
+ * @param {{ askCap?: number }} [options] - `askCap` is the recorder's
+ *   `episodeAskChars`: a stored ask that reached the cap was truncated, and its
+ *   surviving prefix is usually boilerplate shared with unrelated tasks, so it
+ *   cannot identify a task. Omitted, only the `askTruncated` flag is honoured.
+ * @returns {object} per-cluster and aggregate comparison, plus what was skipped.
  */
-export function computeRepeatMetric(episodes) {
-  const groups = new Map()
+export function computeRepeatMetric(episodes, options = {}) {
+  const analysed = []
+  let skippedShort = 0
+  let skippedTruncated = 0
   for (const episode of episodes ?? []) {
     if (!episode || typeof episode.toolCallCount !== 'number') continue
-    const signature = taskSignature(episode)
-    if (!groups.has(signature)) groups.set(signature, [])
-    groups.get(signature).push(episode)
+    const capped = options.askCap !== undefined && (episode.ask ?? '').length >= options.askCap
+    if (episode.askTruncated === true || capped) {
+      skippedTruncated += 1
+      continue
+    }
+    // Identify the turn by its RESOLVED request when one was recorded: for a
+    // short reply that is "the question it answered + the reply", which is the
+    // only form in which a one-letter answer identifies a task.
+    const requestText = episode.askContext || episode.ask || ''
+    const tokens = tokenize(requestText)
+    if (tokens.size < MIN_TASK_TOKENS) {
+      skippedShort += 1
+      continue
+    }
+    analysed.push({ episode, tokens, cwd: String(episode.cwd ?? '') })
   }
+
+  const clusters = []
+  for (const item of analysed) {
+    let best
+    let bestSimilarity = 0
+    for (const cluster of clusters) {
+      if (cluster.cwd !== item.cwd) continue
+      const similarity = jaccard(item.tokens, cluster.representative)
+      if (similarity > bestSimilarity) {
+        bestSimilarity = similarity
+        best = cluster
+      }
+    }
+    if (best !== undefined && bestSimilarity >= TASK_CLUSTER_SIMILARITY) {
+      best.items.push(item.episode)
+    } else {
+      clusters.push({ cwd: item.cwd, representative: item.tokens, items: [item.episode] })
+    }
+  }
+
   const rows = []
   let firstTotal = 0
   let laterTotal = 0
   let laterCount = 0
   let groupsConsidered = 0
-  for (const [signature, list] of groups) {
-    if (list.length < 2) continue
+  for (const cluster of clusters) {
+    if (cluster.items.length < 2) continue
     groupsConsidered++
-    const ordered = [...list].sort((a, b) => String(a.startedAt).localeCompare(String(b.startedAt)))
+    const ordered = [...cluster.items].sort((a, b) => String(a.startedAt).localeCompare(String(b.startedAt)))
     const first = ordered[0]
     const later = ordered.slice(1)
     const firstCalls = first.toolCallCount
@@ -375,18 +449,29 @@ export function computeRepeatMetric(episodes) {
     laterTotal += later.reduce((sum, episode) => sum + episode.toolCallCount, 0)
     laterCount += later.length
     rows.push({
-      signature,
+      signature: taskSignature(ordered[ordered.length - 1]),
       runs: ordered.length,
+      workspace: cluster.cwd,
       firstToolCalls: firstCalls,
       laterAverageToolCalls: Number(laterAvg.toFixed(2)),
       delta: Number((laterAvg - firstCalls).toFixed(2)),
-      example: truncate(ordered[ordered.length - 1].ask ?? '', 90),
+      // A one-letter answer is meaningless in a report; say so and show the
+      // resolved question instead.
+      isReply: Boolean(ordered[ordered.length - 1].askContext),
+      example: truncate(
+        ordered[ordered.length - 1].askContext || ordered[ordered.length - 1].ask || '',
+        90,
+      ),
     })
   }
   rows.sort((a, b) => a.delta - b.delta)
   const firstAverage = groupsConsidered > 0 ? firstTotal / groupsConsidered : 0
   const laterAverage = laterCount > 0 ? laterTotal / laterCount : 0
   return {
+    episodesAnalysed: analysed.length,
+    episodesSkipped: skippedShort + skippedTruncated,
+    episodesSkippedShort: skippedShort,
+    episodesSkippedTruncated: skippedTruncated,
     repeatedTaskGroups: groupsConsidered,
     firstRunAverageToolCalls: Number(firstAverage.toFixed(2)),
     laterRunAverageToolCalls: Number(laterAverage.toFixed(2)),
