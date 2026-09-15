@@ -1,0 +1,106 @@
+# ---------------------------------------------------------------------------
+# .gitignore — Dshka
+#
+# Rule of thumb: anything that is *generated*, *machine-local* or *secret*
+# stays out. Source, tests, tooling and documentation are committed.
+# If you add a new credential file, add it here in the same commit.
+# ---------------------------------------------------------------------------
+
+# --- Secrets: never commit, never track --------------------------------
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.ppk
+id_rsa*
+id_ed25519*
+id_ecdsa*
+id_dsa*
+*_rsa
+*_ed25519
+.credentials
+.credentials.*
+.credentials.yaml
+*.credentials
+*credential*.json
+*secret*.json
+*token*.json
+.npmrc
+.pypirc
+.netrc
+.git-credentials
+kubeconfig
+*.kubeconfig
+
+# --- Node / package managers -------------------------------------------
+node_modules/
+.npm/
+.pnpm-store/
+.pnpm-debug.log*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.yarn/cache/
+.yarn/install-state.gz
+package-lock.json.bak
+
+# --- Runtime state: local plugin store, session logs, test scratch ------
+.tmp-test/
+.tmp/
+.tmp-*/
+tmp/
+*.tmp
+.dsh/
+.dsh-store/
+.git-local/
+experience-loop/
+sessions/
+storages/
+attachments/
+*.jsonl
+*.jsonl.zstd
+*.ndjson
+dsh-boot.log
+*-boot.log
+*.stackdump
+
+# --- Local backup / patch residue --------------------------------------
+*.bak
+*.bak-*
+*.orig
+*.rej
+*~
+*.save
+*.old
+*.before-*
+*.pre-*
+
+# --- Logs and coverage --------------------------------------------------
+*.log
+logs/
+coverage/
+.nyc_output/
+*.lcov
+
+# --- Build output -------------------------------------------------------
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# --- Editors / OS -------------------------------------------------------
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+*.lnk

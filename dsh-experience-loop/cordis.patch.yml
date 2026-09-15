@@ -1,0 +1,10 @@
+# Experience Loop bundle layer.
+#
+# One row, inserted under a stable id so a profile's own cordis.patch.yml can
+# override its whole `config` by id without touching this package. Every field
+# is optional: the plugin normalizes its own config (it deliberately exports no
+# `Config` schema, so it has no host-package import at all) and applies the
+# documented defaults in lib/config.mjs.
+- insert:
+    - id: experience-loop
+      name: dsh-experience-loop

@@ -1,0 +1,24 @@
+# Normalize line endings: LF in the repository and LF in the working tree.
+#
+# Without this, Git's core.autocrlf heuristics queue every text file for a
+# CRLF rewrite on the next checkout, which dirties an otherwise clean tree on
+# Windows and makes cross-platform diffs noisy.
+* text=auto eol=lf
+
+# Windows-only scripts must keep CRLF to stay runnable by cmd.exe.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Binary assets — never diff, never convert.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.zstd binary
+*.woff binary
+*.woff2 binary
