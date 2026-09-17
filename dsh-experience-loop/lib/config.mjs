@@ -33,6 +33,7 @@ const KNOWN_KEYS = new Set([
   'exposeSkills',
   'maxExposedSkills',
   'skillDescriptionChars',
+  'candidateDescriptionChars',
   'defaultScope',
   'recencyHalfLifeDays',
   'weights',
@@ -75,9 +76,9 @@ export function resolveConfig(input) {
   const inject = raw.inject && typeof raw.inject === 'object' ? raw.inject : {}
   const weights = raw.weights && typeof raw.weights === 'object' ? raw.weights : {}
 
-  const exposeSkills = EXPOSE_MODES.includes(raw.exposeSkills) ? raw.exposeSkills : 'verified'
+  const exposeSkills = EXPOSE_MODES.includes(raw.exposeSkills) ? raw.exposeSkills : 'all'
   if (raw.exposeSkills !== undefined && !EXPOSE_MODES.includes(raw.exposeSkills)) {
-    warnings.push(`exposeSkills "${raw.exposeSkills}" is not one of ${EXPOSE_MODES.join('|')}; using "verified"`)
+    warnings.push(`exposeSkills "${raw.exposeSkills}" is not one of ${EXPOSE_MODES.join('|')}; using "all"`)
   }
 
   const defaultScope = raw.defaultScope === 'global' ? 'global' : 'project'
@@ -116,10 +117,25 @@ export function resolveConfig(input) {
      */
     askContextChars: Math.round(num(raw.askContextChars, 1200, 0, 8000)),
 
+    /**
+     * The catalog is the only door to a learned skill: `dsh-tool-skill` resolves
+     * a requested name against `list()` and refuses anything absent. So hiding a
+     * candidate does not merely defer it — it makes promotion unreachable, since
+     * promotion needs evidence and evidence needs the skill to be loadable.
+     * `all` therefore lists every non-deprecated record, paying for the extra
+     * entries with a shortened description rather than with invisibility.
+     * `verified` and `none` remain available for an operator who wants them.
+     */
     exposeSkills,
-    maxExposedSkills: Math.round(num(raw.maxExposedSkills, 25, 0, 200)),
+    maxExposedSkills: Math.round(num(raw.maxExposedSkills, 40, 0, 200)),
     skillDescriptionChars: Math.round(num(raw.skillDescriptionChars, 300, 40, 500)),
-
+    /**
+     * A candidate's WHOLE catalog line, `[candidate - unproven] ` marker
+     * included — that marker is what tells the model it is loading an unproven
+     * procedure, so it is charged against this budget rather than added on top.
+     * This is the dial that makes listing everything affordable.
+     */
+    candidateDescriptionChars: Math.round(num(raw.candidateDescriptionChars, 160, 40, 500)),
     defaultScope,
     recencyHalfLifeDays: num(raw.recencyHalfLifeDays, 45, 1, 3650),
 

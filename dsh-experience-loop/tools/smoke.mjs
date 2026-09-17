@@ -105,7 +105,7 @@ for (const ref of reviewed.value.created) {
   console.log(`  stored: ${record.id}  skillName=${record.skillName ?? '-'}  status=${record.status}  scope=${record.scope.level}`)
 }
 
-console.log(rule('4. HARNESS SKILL CATALOG — a candidate is deliberately NOT advertised'))
+console.log(rule('4. HARNESS SKILL CATALOG — a candidate IS advertised, marked and shortened'))
 console.log(`before promotion: ${(await host.listSkills({ cwd: agent.session.header.cwd })).length} exposed skill(s)`)
 await host.runTool(
   'experience_review',

@@ -133,9 +133,10 @@ On the `experience-loop` row of your profile patch. Every field is optional.
     episodeRetention: 400
     episodeAskChars: 400
     askContextChars: 1200      # how much of the previous assistant turn may serve as referent
-    exposeSkills: verified     # verified | all | none
-    maxExposedSkills: 25
-    skillDescriptionChars: 300
+    exposeSkills: all          # all | verified | none
+    maxExposedSkills: 40
+    skillDescriptionChars: 300        # a VERIFIED skill's catalog line
+    candidateDescriptionChars: 160    # a CANDIDATE's WHOLE line, marker included
     defaultScope: project      # scope when a review entry omits one
     recencyHalfLifeDays: 45
     weights: { relevance: 1.0, confidence: 0.6, environment: 0.5, recency: 0.25, reliability: 0.4 }
@@ -365,23 +366,39 @@ Every observed outcome is labelled as such (`observed:skill-used`,
 # - surfaced in 7 turn(s), never scored on that alone
 ```
 
-### Why a skill can be loaded by name before it is verified
+### Why every candidate is in the catalog
 
-`dsh-tool-skill` resolves a requested name against the provider's **catalog**
-and rejects anything absent, so a record hidden from the catalog cannot be
-loaded by anyone — which would make promotion unreachable, since promotion is
-what puts a skill in the catalog. The deadlock is broken on the human's side
-only:
+The first shipped version exposed only `verified` skills, and that turned out to
+be a deadlock rather than a policy. `dsh-tool-skill` resolves a requested name
+against the provider's catalog and refuses anything absent:
 
-- `list()` — the catalog the model sees — still contains **only** what
-  `exposeSkills` allows (`verified` by default), so context cost and the
-  model's exposure to unverified advice are unchanged;
-- `get()` — reached *directly* by the human's `/skill-name` gesture — serves any
-  non-deprecated record, and the returned body states its own status.
+```js
+// @deepseek-ai/dsh-tool-skill/lib/index.js
+const summary = (await ctx.skills.list(lookup)).find((skill) => skill.name === args.name)
+if (!summary) throw new Error(`skill "${args.name}" is unknown or no longer available`)
+```
 
-So a human can exercise a candidate by name, that exercise is observed, and two
-successful ones promote it into the catalog where the model can then load it.
-Nothing else about exposure changed.
+So a hidden candidate cannot be loaded *by anyone*, which means it can never be
+exercised, which means it can never earn the observed outcome that would promote
+it. Measured over 37 hours of real use: 27 learned skills, **25 stuck at
+`candidate`**, 7 observed skill uses, and **0 promotions** — the only skill that
+ever accumulated observed uses was the one that was already verified.
+
+The gate is therefore gone, but not the cost control. A candidate is listed with
+a **shorter description** and an explicit `[candidate - unproven]` marker, and
+`get()` still refuses deprecated records and still serves them by name for the
+human's `/skill-name` gesture. On this repo's real store that is **13 skills /
+2063 chars per request** instead of 1 skill / 192 chars — about 1.9 KB to make
+12 more skills loadable, with 10 of the 12 candidate lines truncated by the
+shorter tier. `exposeSkills: verified` and `none` remain available.
+
+> This mirrors how Hermes Agent does it. Its `prompt_builder.py` decides
+> visibility with `hides()`, which filters only on explicitly-disabled names,
+> platform and tool availability — there is **no** status/confidence/provenance
+> gate, and its own comment says why: *"NEVER drop entries — agent-created
+> skills are the model's project memory and it won't rediscover them via
+> skills_list."* It pays for the catalog with one line per skill and loads
+> bodies on demand, which is exactly the trade made here.
 
 ---
 
@@ -411,7 +428,7 @@ advertised-but-unloadable skills, conflicts seen, sensitive spans redacted.
 ## Development
 
 ```sh
-node tools/run-tests.mjs       # 44 tests, all in ONE process
+node tools/run-tests.mjs       # 73 tests, all in ONE process
 node --test test/              # same suite, one child per file (needs process spawn)
 node tools/smoke.mjs           # offline end-to-end demo; prints every artefact
 node tools/check-retrieval.mjs --store <root> --cwd <dir> --ask '<text>'
@@ -488,15 +505,20 @@ before the tools SDK), `ctx.skills.registerProvider` ×1, `ctx.provide('experien
   `experience_review`, nothing is distilled; the episode journal still records
   the evidence and `/experience pending` shows it. There is no background
   consolidator (deliberately: no LLM calls inside the plugin, no recursion).
-- **A learned skill still cannot be loaded by the model until it is verified.**
-  `dsh-tool-skill` resolves a name against the provider's catalog, so with
-  `exposeSkills: verified` (the default) a candidate is invisible to the model
-  no matter what retrieval says about it. Observed outcomes can promote it, but
-  only once something has exercised it — for a fresh candidate that something is
-  the human's `/skill-name` gesture or `/experience verify`. Raising exposure
-  (`exposeSkills: all`) removes the gate at the cost of listing every candidate
-  in every request's catalog; that trade is deliberately left to the operator
-  rather than made silently by the plugin.
+- **The catalog is paid for on every request.** Listing every candidate is what
+  makes promotion reachable, but it is not free: the shorter candidate tier is
+  the only thing keeping it affordable, and with a few hundred learned skills it
+  would stop being affordable at all. `maxExposedSkills` (default 40) is the
+  hard cap, and verified skills are never the ones dropped when it bites.
+- **Promotion still needs something to exercise the skill.** Observed outcomes
+  can promote a candidate, but only after it has actually been loaded; nothing
+  promotes a skill purely for existing. `/experience verify <id>` is the direct
+  human override.
+- **Duplicate skills accumulate.** The catalog makes this visible for the first
+  time — this repo's store holds five separately-distilled skills about
+  establishing GitHub repo maintenance, which the `MERGE_SIMILARITY` (0.72)
+  dedupe did not merge because their titles and summaries differ. Exposure
+  surfaces the redundancy; it does not fix it.
 - **Keyword scoring, not embeddings.** Accurate for the vocabulary-overlap case
   this system targets, and free; it will miss a relevant record that shares no
   vocabulary with the request. Relevance is a *saturating function of the

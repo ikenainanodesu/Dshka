@@ -115,8 +115,17 @@ test('A: first time — nothing is injected, the turn is journalled, and a revie
     assert.match(record.skillName, /^exp-docker-service-recovery$/)
     assert.ok(runtime.store.recentEpisodes(5)[0].reviewedAt, 'the evidence episode was linked and closed')
 
-    // A candidate is deliberately NOT advertised to the model yet.
-    assert.deepEqual(await host.listSkills({ cwd: agent.session.header.cwd }), [])
+    // A candidate IS advertised now, marked as unproven and given less room
+    // than a verified skill's line. Hiding it would make promotion unreachable:
+    // `dsh-tool-skill` only loads names the catalog contains, so a hidden
+    // candidate can never be exercised and never earn its evidence.
+    const advertised = await host.listSkills({ cwd: agent.session.header.cwd })
+    assert.equal(advertised.length, 1)
+    assert.match(advertised[0].description, /^\[candidate - unproven\] /)
+    assert.ok(
+      advertised[0].description.length <= 160,
+      `a candidate's line stays inside candidateDescriptionChars (got ${advertised[0].description.length})`,
+    )
 
     // Two successful uses promote it.
     await host.runTool(
@@ -131,6 +140,7 @@ test('A: first time — nothing is injected, the turn is journalled, and a revie
     const candidates = await host.listSkills({ cwd: agent.session.header.cwd })
     assert.equal(candidates.length, 1)
     assert.equal(candidates[0].name, promoted.skillName)
+    assert.doesNotMatch(candidates[0].description, /\[candidate/, 'the marker is gone once it is proven')
     assert.ok(candidates[0].description.length <= 300)
 
     const loaded = await host.getSkill(candidates[0])

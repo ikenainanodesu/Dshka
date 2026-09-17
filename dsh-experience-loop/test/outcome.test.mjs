@@ -15,6 +15,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { apply } from '../index.mjs'
+import { CANDIDATE_MARKER } from '../lib/skills.mjs'
 import { cleanup, createFakeHost, makeAgent, makeTempStoreRoot, playSkillGesture, playTurn, userMessage } from './harness.mjs'
 
 const SKILL = {
@@ -86,23 +87,34 @@ test('an observed skill use in a completed turn scores and can promote the recor
   }
 })
 
-test('a promoted skill becomes loadable, which is the point of promoting it', async () => {
+test('a candidate is loadable from the start, and promotion upgrades what the catalog says', async () => {
   const { root, host, agent } = boot({ promoteSuccesses: 2 })
   try {
     host.emit('agent/session-start', { agent, source: 'startup' })
     const { record, skillName } = await learnSkill(host, agent)
 
-    // Before: a candidate is not in the catalog, so the model cannot load it.
+    // The door: the model can only `skill`-load a name the catalog contains, so
+    // an unlisted candidate could never be exercised and never be promoted.
     const before = await host.listSkills({ cwd: agent.session.header.cwd })
-    assert.equal(before.length, 0, 'a candidate is deliberately not in the catalog')
+    assert.equal(before.length, 1, 'a candidate is advertised')
+    assert.match(before[0].description, /\[candidate - unproven\]/)
+    const candidateLineLength = before[0].description.length
 
     playTurn(host, { session: agent.session, turn: 1, toolCalls: [skillCall(skillName)] })
     playTurn(host, { session: agent.session, turn: 2, toolCalls: [skillCall(skillName)] })
     assert.equal(record.status, 'verified')
 
     const after = await host.listSkills({ cwd: agent.session.header.cwd })
-    assert.equal(after.length, 1, 'the verified skill is now advertised to the model')
+    assert.equal(after.length, 1)
     assert.equal(after[0].name, skillName)
+    assert.doesNotMatch(after[0].description, /\[candidate/, 'the marker is dropped once proven')
+    // The marker is the only difference until the source text is long enough to
+    // be truncated, so compare by stripping it rather than comparing lengths.
+    assert.equal(
+      after[0].description,
+      before[0].description.slice(CANDIDATE_MARKER.length),
+      'promotion removes the marker and nothing else',
+    )
   } finally {
     cleanup(root)
   }
@@ -265,17 +277,32 @@ test('observed attribution can be switched off without touching the rest', async
 test('the injected block only calls a skill loadable when it actually is', async () => {
   const ask = 'The service keeps restarting, can you find out why and fix it?'
 
-  // Default exposure: a brand new candidate is NOT in the catalog, so the block
-  // must not claim the model can load it. A measured real session had this line
-  // offering five learned skills that a `skill` call would have refused.
-  const candidateRun = boot()
+  // Under the default (`all`) the candidate really is loadable, so the block may
+  // say so — and it must, or the model would never try.
+  const defaultRun = boot()
   try {
-    const { host, agent } = candidateRun
+    const { host, agent } = defaultRun
     host.emit('agent/session-start', { agent, source: 'startup' })
     const { skillName } = await learnSkill(host, agent)
     const decision = await host.preStep({ agent, turn: 2, step: 1, messages: [userMessage(ask)] })
     const text = decision.messages.at(-1).content[0].text
-    assert.ok(text.includes('<experience_loop_context>'), 'the record is still injected as advice')
+    assert.ok(text.includes('<experience_loop_context>'), 'the record is injected as advice')
+    assert.match(text, /Matching learned skills are loadable with the skill tool/)
+    assert.ok(text.includes(skillName))
+  } finally {
+    cleanup(defaultRun.root)
+  }
+
+  // Under `verified` the catalog withholds it, so the claim would be a lie. A
+  // measured real session had this line offering five learned skills that a
+  // `skill` call would have refused.
+  const gatedRun = boot({ exposeSkills: 'verified' })
+  try {
+    const { host, agent } = gatedRun
+    host.emit('agent/session-start', { agent, source: 'startup' })
+    const { skillName } = await learnSkill(host, agent)
+    const decision = await host.preStep({ agent, turn: 2, step: 1, messages: [userMessage(ask)] })
+    const text = decision.messages.at(-1).content[0].text
     assert.ok(
       !/Matching learned skills are loadable/.test(text),
       'it must not promise a load the catalog will refuse',
@@ -283,35 +310,42 @@ test('the injected block only calls a skill loadable when it actually is', async
     assert.match(text, /cannot be loaded yet/)
     assert.ok(text.includes(skillName))
   } finally {
-    cleanup(candidateRun.root)
-  }
-
-  const exposedRun = boot({ exposeSkills: 'all' })
-  try {
-    const { host, agent } = exposedRun
-    host.emit('agent/session-start', { agent, source: 'startup' })
-    const { skillName } = await learnSkill(host, agent)
-    const decision = await host.preStep({ agent, turn: 2, step: 1, messages: [userMessage(ask)] })
-    const text = decision.messages.at(-1).content[0].text
-    assert.match(text, /Matching learned skills are loadable with the skill tool/)
-    assert.ok(text.includes(skillName))
-  } finally {
-    cleanup(exposedRun.root)
+    cleanup(gatedRun.root)
   }
 })
 
-test('an explicitly named candidate loads even though the catalog hides it', async () => {
-  const { root, host, agent } = boot()
+test('a deprecated skill is never offered, under any exposure mode', async () => {
+  for (const [mode, expected] of [['all', 1], ['verified', 0]]) {
+    const { root, host, agent } = boot({ exposeSkills: mode })
+    try {
+      host.emit('agent/session-start', { agent, source: 'startup' })
+      const { record, skillName } = await learnSkill(host, agent)
+      assert.equal((await host.listSkills({ cwd: agent.session.header.cwd })).length, expected)
+
+      record.status = 'deprecated'
+      assert.deepEqual(
+        await host.listSkills({ cwd: agent.session.header.cwd }),
+        [],
+        `exposeSkills:${mode} must still withhold a withdrawn record`,
+      )
+      assert.equal(await host.getSkill({ name: skillName, locator: { id: record.id } }), undefined)
+    } finally {
+      cleanup(root)
+    }
+  }
+})
+
+test('an explicitly named candidate loads even when the catalog withholds it', async () => {
+  const { root, host, agent } = boot({ exposeSkills: 'verified' })
   try {
     host.emit('agent/session-start', { agent, source: 'startup' })
     const { record, skillName } = await learnSkill(host, agent)
 
-    // The model's route goes through list(), which excludes it...
+    // The model's route goes through list(), which excludes it under `verified`...
     const listed = await host.listSkills({ cwd: agent.session.header.cwd })
     assert.equal(listed.length, 0)
 
-    // ...but the human's `/skill-name` gesture calls the provider directly, and
-    // that is the only channel by which a candidate can be exercised at all.
+    // ...but the human's `/skill-name` gesture calls the provider directly.
     const loaded = await host.getSkill({ name: skillName, locator: { id: record.id } })
     assert.ok(loaded !== undefined, 'an explicitly named candidate is loadable')
     assert.match(loaded.content, /Status: \*\*candidate\*\*/, 'and it says what it is')
