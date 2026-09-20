@@ -153,6 +153,53 @@ test('a hand-edited document is read back without dropping unknown fields', () =
     const hand = reloaded.find('exp_hand')
     assert.equal(hand.title, 'Written by hand')
     assert.equal(hand.status, 'candidate')
+
+    // The test's own name was a promise its assertions never checked: the custom
+    // field was written and then never looked for. Assert it, and assert it
+    // across the DESTRUCTIVE path — load, dirty the scope, flush — because
+    // `flush()` rewrites every record in the scope from the in-memory objects.
+    assert.equal(hand.customNote, 'preserved', 'an unknown field survives the load')
+    reloaded.put(reloaded.find('exp_1'))
+    reloaded.flush()
+    assert.equal(build(root).store.find('exp_hand').customNote, 'preserved', 'and survives a flush')
+  } finally {
+    cleanup(root)
+  }
+})
+
+test('per-record observation provenance survives a load-modify-flush cycle', () => {
+  // Regression for a real, measured data loss. `reviveRecord` rebuilt records
+  // from a fixed field list, so fields it had not been taught about were dropped
+  // in memory and then ERASED from disk by the next flush of that scope. Live
+  // damage: state.json reported 142 record surfaces while only 6 records still
+  // carried a `surfacedCount`, and `observedOutcomes` survived on 2.
+  const root = makeTempStoreRoot('store')
+  try {
+    const first = build(root)
+    const created = record({ id: 'exp_obs', type: 'skill', title: 'Observed', summary: 's' })
+    created.skillName = 'exp-observed'
+    first.store.put(created)
+    first.store.flush()
+
+    // A second process/instance loads it, records observations, and writes.
+    const second = build(root)
+    const loaded = second.store.find('exp_obs')
+    loaded.observedOutcomes = { success: 2, failure: 1 }
+    loaded.surfacedCount = 7
+    loaded.lastOutcome = { signal: 'observed:skill-used', outcome: 'success', at: '2026-01-01T00:00:00.000Z' }
+    second.store.put(loaded)
+    second.store.flush()
+
+    const reloaded = build(root).store.find('exp_obs')
+    assert.deepEqual(reloaded.observedOutcomes, { success: 2, failure: 1 }, 'observedOutcomes survived')
+    assert.equal(reloaded.surfacedCount, 7, 'surfacedCount survived')
+    assert.equal(reloaded.lastOutcome.signal, 'observed:skill-used', 'lastOutcome survived')
+
+    // And once more, to prove it is not a one-cycle accident.
+    const third = build(root)
+    third.store.put(third.store.find('exp_obs'))
+    third.store.flush()
+    assert.equal(build(root).store.find('exp_obs').surfacedCount, 7, 'still there after a second cycle')
   } finally {
     cleanup(root)
   }

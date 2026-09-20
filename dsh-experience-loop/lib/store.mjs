@@ -158,11 +158,40 @@ export function makeRecord(entry, context) {
   }
 }
 
-/** Coerce whatever is on disk into a usable record without dropping user edits. */
+/** Keys that must never be copied off disk into a record (prototype safety). */
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
+
+/** Every own field of a parsed document record except the prototype-dangerous ones. */
+function passthrough(raw) {
+  const out = {}
+  if (!raw || typeof raw !== 'object') return out
+  for (const [key, value] of Object.entries(raw)) {
+    if (!UNSAFE_KEYS.has(key)) out[key] = value
+  }
+  return out
+}
+
+/**
+ * Coerce whatever is on disk into a usable record without dropping user edits.
+ *
+ * The passthrough spread is the whole point and must stay FIRST. The record
+ * shape grows over time (`observedOutcomes`, `surfacedCount`, `lastOutcome`),
+ * and `flush()` rewrites a scope from these in-memory objects — so a loader
+ * that enumerates only the fields it has heard of does not merely hide the
+ * others, it DELETES them on the next write. That is exactly what happened:
+ * the aggregate counters in `state.json` reported 142 record surfaces while
+ * only 6 records still carried a `surfacedCount`, because every record the
+ * loader had not been taught about was quietly emptied of its provenance.
+ *
+ * `makeRecord` deliberately does NOT do this: that path builds a record from a
+ * MODEL-supplied entry, where unknown keys are the model's business and the
+ * schema already rejects them. Trust the disk; do not trust the model.
+ */
 function reviveRecord(raw, scope, projectKey) {
   const type = RECORD_TYPES.includes(raw?.type) ? raw.type : 'memory'
   const now = nowIso()
   return {
+    ...passthrough(raw),
     id: typeof raw?.id === 'string' && raw.id !== '' ? raw.id : newId(),
     type,
     status: RECORD_STATUSES.includes(raw?.status) ? raw.status : 'candidate',
