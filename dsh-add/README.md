@@ -117,6 +117,24 @@ Tests and online verification are different claims: the first four rows are real
 - Head-to-body ratio measured with `headcount_proof.py`: skull-to-soles ≈ 1050 px over a ≈280 px head, i.e. **about 3.75 heads**. The bundled automatic detector reported 14.15 heads on this image, which is wrong; that reading is discarded and the number above comes from drawn calibration lines checked by eye.
 - `ref-q3.png` is the proportion-authority reference composed by `build_proportion_ref.py` (left = design authority, right = a skeleton computed for the requested head count); `contract-icon.txt` is the highest-priority constraint used for generation.
 
+### Transparent version
+
+`logo-nobg.png` (1254px) plus `logo-nobg-512/256/128.png` are the transparent-background versions, produced by `remove_bg.py`, which cuts the cream canvas and keeps what is on it.
+
+The important part: **colour keying does not work here.** The apron is `rgb(247,243,249)`, only 3 units away from the background `rgb(248,248,232)`, and the skin is nearly as close — a "distance from the background colour" threshold eats holes through the apron and the face. The background is the region *connected to the canvas edge*, so the cut is a flood fill, not a colour test. Alpha ramps only within a few pixels of the cut (histogram: 54.45% fully transparent, 2.59% partial, 42.97% opaque).
+
+The two blurred plugin cartridges **remain in the transparent version**. That is a measured result, not an oversight — they cannot be separated from the figure automatically:
+
+| Attempt | Measured result |
+|---|---|
+| Connected components | cartridges and figure share the largest component (their blurred edges meet) |
+| Saturation test | cartridges S≈23, but the apron is S≈3 and the canvas S≈22 — no separation |
+| Alpha test | the cartridges are painted low-contrast, not semi-transparent: alpha 255, same as the figure |
+| Morphological erosion, 20/30px | still a single component after eroding — the waist join is wide, not a thin bridge |
+| Row-by-row run splitting | only 385 of 770 rows on the left have a gap; on the right, 589 rows have **no** gap at all |
+
+Cutting along rows anyway would slice off hair, so it was not done. A figure-only version needs a fresh generation without the cartridges in the composition.
+
 ## License
 
 MIT
