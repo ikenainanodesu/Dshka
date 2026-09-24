@@ -2,7 +2,14 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-A local experience-loop plugin for [DeepSeek Harness](https://deepseek-harness.github.io/deepseek-harness/develop/basic/). It turns reviewed lessons into reusable, inspectable records rather than treating every tool call as knowledge.
+A DSH workspace holding two independent tools for [DeepSeek Harness](https://deepseek-harness.github.io/deepseek-harness/develop/basic/):
+
+| Tool | What it is |
+|---|---|
+| [`dsh-experience-loop/`](dsh-experience-loop/) | A local experience-loop plugin: reviewed lessons become reusable, inspectable records. |
+| [`dsh-add/`](dsh-add/) | A CLI that installs a DSH community plugin **by name**, resolving collisions before it installs. |
+
+The first two sections below describe the experience-loop plugin.
 
 **Execute → validate → review → distil → reuse → revise.**
 
@@ -114,4 +121,6 @@ Keyword retrieval can miss paraphrases. Duplicate records and unresolved conflic
 
 - [`dsh-experience-loop/`](dsh-experience-loop/): plugin entry, source, tests and operator tools.
 - [`dsh-experience-loop/README.md`](dsh-experience-loop/README.md): detailed configuration and implementation guide.
+- [`dsh-add/`](dsh-add/): CLI that installs a DSH plugin by name.
+- [`dsh-add/README.md`](dsh-add/README.md): how name resolution, disambiguation and post-install verification work.
 - [`docs/`](docs/): operational guidance.

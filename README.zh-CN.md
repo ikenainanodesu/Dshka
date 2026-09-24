@@ -2,7 +2,14 @@
 
 [English](README.md) | **简体中文**
 
-面向 [DeepSeek Harness](https://deepseek-harness.github.io/deepseek-harness/develop/basic/) 的本地经验循环插件。将经过复盘的经验沉淀为可复用、可检查的记录，而不是把每次工具调用都当成知识。
+DSHKA 仓库包含两个面向 [DeepSeek Harness](https://deepseek-harness.github.io/deepseek-harness/develop/basic/) 的独立工具：
+
+| 工具 | 说明 |
+|---|---|
+| [`dsh-experience-loop/`](dsh-experience-loop/) | 本地经验循环插件：将经过复盘的经验沉淀为可复用、可检查的记录。 |
+| [`dsh-add/`](dsh-add/) | 按**名字**安装 DSH 社区插件的命令行工具，先解决重名再安装。 |
+
+本节之后的内容描述经验循环插件。
 
 **执行 → 验证 → 复盘 → 提炼 → 复用 → 修订。**
 
@@ -114,4 +121,6 @@ node tools/smoke.mjs
 
 - [`dsh-experience-loop/`](dsh-experience-loop/)：插件入口、源码、测试和运维工具。
 - [`dsh-experience-loop/README.md`](dsh-experience-loop/README.md)：详细配置及实现说明。
+- [`dsh-add/`](dsh-add/)：按名字安装 DSH 插件的命令行工具。
+- [`dsh-add/README.zh.md`](dsh-add/README.zh.md)：名字解析、重名消歧与装后验证的做法说明。
 - [`docs/`](docs/)：运维指南。
