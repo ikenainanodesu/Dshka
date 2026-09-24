@@ -2,7 +2,7 @@
 
 **English** | [简体中文](README.zh.md)
 
-<img src="assets/logo/logo-readme-v5-400.png" alt="dsh-add: chibi DeepSeek whale-chan holding one plugin cartridge" width="300">
+<img src="assets/logo/logo-readme-v6-400.png" alt="dsh-add: chibi DeepSeek whale-chan holding one plugin cartridge" width="300">
 
 Install a [DeepSeek Harness](https://deepseek-harness.github.io/deepseek-harness/develop/basic/) plugin **by name**.
 
@@ -110,21 +110,24 @@ Tests and online verification are different claims: the first four rows are real
 
 ## Logo and assets
 
-**The project logo is the `logo-readme-v5*.png` set** — low-saturation watercolour, white background keyed to transparent, edges faded. It is what the top of this README shows:
+**The project logo is the `logo-readme-v6*.png` set** — low-saturation watercolour, white background keyed to transparent, edges faded. It is what the top of this README shows:
 
 | File | Note |
 |---|---|
-| `logo-readme-v5.png` | master, 1024×1536 |
-| `logo-readme-v5-800/400/200.png` | scaled; 400 is the width the README uses |
-| `logo-readme-v5-square-512/128.png` | square builds on transparency, for avatars and package listings |
+| `logo-readme-v6.png` | master, 1024×1536 |
+| `logo-readme-v6-800/400/200.png` | scaled; 400 is the width the README uses |
+| `logo-readme-v6-square-512/128.png` | square builds on transparency, for avatars and package listings |
 
 The edge fade exists so one file works on both GitHub themes: the flat white is keyed out, then alpha ramps down across the outer 9% so the artwork dissolves into the page.
 
-**How the paper between the hair strands was removed** (this logo was reworked more here than anywhere else). Flooding paper in from the canvas border only reaches the outside, so paper **enclosed by the strands** stays in the image. Colour cannot separate it either: the leftovers are neutral white (`R−B` between −1 and +1) and the face is a warm white (+6..+13), but the **apron, socks and headdress lace are neutral white too** (0..+1) and collide with the leftovers exactly.
+**Two traps hit while clearing the paper enclosed by the hair** (this part of the logo was reworked more than anything else):
 
-Three filters in series, and the order matters: (1) neutral white (`min ≥ 228` and `|R−B| ≤ 6`) — drops the warm face and the blue-tinted watercolour edges; (2) flood the *whole* neutral set from the canvas border — **this must happen before any region limit**, or the hair strands cut the outer background off from the border and the entire outside is misread as enclosed; (3) only then a region window (`y 430..760`, `x < 330` or `x > 700`, clear of the fin and collar lace) plus a size window (40..3000 px, which discards apron-sized whites). Result: 21 blobs, 9030 px cleared; strand gaps clean, apron, lace and face intact.
+1. **Flood fill must happen before the region limit.** Restricting to "the sides of the head" first let the strands cut the outer background off from the canvas border, so the whole outside was classified as enclosed — 90k and 116k px of bogus candidates that were simply the background.
+2. **Do not decide by position and area.** The first version did, and keyed out the **white lace at the waist**: lace white and leftover paper white are the same neutral white (min channel 253-254, `|R−B| ≤ 1`), so colour cannot separate them. The reliable test is **whether the blob is ringed by dark hair**: take a ring around each candidate and require at least 55% of its opaque pixels to be dark and blue. Measured here, genuine strand gaps score 60-91% while the lace blob that was wrongly cleared scores 4-43%.
 
-**The fade must not be built with a distance transform.** Light regions inside the figure read as paper, so a distance transform measures distance to those interior holes and drags the figure toward translucent — 26.2% partial, against 3.9% for a coordinate ramp.
+Result: 5 blobs, 3657 px cleared — more conservative than the previous attempt, which cleared 9557 px and damaged the lace. One inherent loss to know about: watercolour's thin outlines sit close to paper white in every channel, so the key removes about 14857 px of them across the image, mostly at the tip of the ahoge (3285 px) and the shoes (about 9150 px).
+
+**The fade must not be built with a distance transform.** Light regions inside the figure read as paper, so a distance transform measures distance to those interior holes and drags the figure toward translucent — 26.2% partial, against 4.0% for a coordinate ramp.
 
 ### Other versions (kept as alternatives)
 

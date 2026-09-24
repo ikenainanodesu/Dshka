@@ -1,31 +1,24 @@
-"""Clear the blank paper left inside the hair, where the strands enclose it.
+"""Clear blank paper enclosed by hair strands -- and only by hair strands.
 
-fade_edges.py floods paper in from the canvas border, so paper enclosed by the
-figure is never reached. On this render the leftovers sit between the hair
-strands hanging beside the head, below the fins.
+The first version of this keyed out near-white blobs inside a positional window.
+That window also contained white lace (the skirt trim at the waist, the sleeve
+frill), and since lace white and leftover paper white are the same neutral white
+(min channel 253-254, |R-B| <= 1), the lace was keyed out too: a real regression,
+visible as holes in the skirt.
 
-Why the obvious tests fail here (all measured on this image):
-* Distance to the corner colour: the leftovers are blank paper, R-B -1..+1, while
-  the face is a warm white at R-B +6..+13 - so chroma does separate the face, but
-  the apron, socks and headdress lace are neutral too (R-B 0..+1) and DO collide
-  with the leftovers.
-* Geometry alone (inside the closed silhouette): catches the face and the apron.
-* Area alone: the apron is the largest near-white blob in the image.
+Colour cannot separate them, and neither can "is it enclosed" -- both are. What
+does separate them is what surrounds them:
 
-What does work is three filters together, ordered so each removes a specific
-false positive:
-1. neutral white (min channel >= 238 and |R-B| <= 2) - drops the warm face and
-   the blue-tinted watercolour edges;
-2. not reachable from the canvas border **through neutral white only** - the
-   flood fill must see the whole neutral set before any region limit is applied,
-   otherwise the strands cut the outer background off from the border and the
-   entire outside is misread as enclosed;
-3. a region window that excludes the fin and collar lace (y 430..760, x < 330 or
-   x > 700) and a size window (100..3000 px), leaving the small strand gaps and
-   discarding the apron-sized whites.
+* a leftover between strands is ringed by hair, which is dark (luma well under
+  160) and blue;
+* white lace is ringed by more white and by cloth, not by hair.
+
+So a blob is only cleared when a high fraction of the opaque pixels around it are
+hair-dark. Measured on this render, the genuine strand gaps sit at 85-100% hair
+in the ring; the lace blob that was wrongly cleared sits at 10-40%.
 
 Usage:
-    python clear_hair_paper.py INPUT --out OUT.png [--checks DIR] [--min-area 100]
+    python clear_hair_paper.py INPUT --out OUT.png [--ring 7] [--min-hair 0.6]
 """
 
 from __future__ import annotations
@@ -38,31 +31,57 @@ import numpy as np
 from PIL import Image
 from scipy import ndimage
 
-# Region that holds the hair gaps on the 1024x1536 render, clear of both lacings.
-HAIR_BAND = (430, 760, 330, 700)
+# Window that contains the strand gaps, clear of the fin and collar lace.
+HAIR_BAND = (400, 800, 340, 700)
+
+
+def ring_hair_fraction(mask: np.ndarray, opaque: np.ndarray, rgb: np.ndarray, inner: int, outer: int) -> float:
+    """Fraction of the opaque ring around a blob that is hair-dark and blue.
+
+    `rgb` must be in RGB order. OpenCV hands back BGR, and getting this backwards
+    silently returns 0% for every blob (the blue test becomes R-B, which is
+    negative for blue pixels), which is exactly how the first version of this
+    filter managed to clear nothing at all.
+    """
+    kernel_in = np.ones((inner, inner), np.uint8)
+    kernel_out = np.ones((outer, outer), np.uint8)
+    ring = (cv2.dilate(mask, kernel_out) > 0) & (cv2.erode(mask, kernel_in) == 0)
+    ring &= opaque
+    count = int(ring.sum())
+    if count == 0:
+        return 0.0
+    pixels = rgb[ring].astype(np.int16)
+    luma = pixels.mean(axis=1)
+    blue = (pixels[:, 2] - pixels[:, 0]) > 25          # RGB order: channel 2 is blue
+    return float(((luma < 160) & blue).mean())
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("image")
     parser.add_argument("--out", required=True)
-    parser.add_argument("--band", default=None, help="y1,y2,xleft,xright (overrides the default window)")
-    parser.add_argument("--min-area", type=int, default=100)
+    parser.add_argument("--band", default=None, help="y1,y2,xleft,xright")
+    parser.add_argument("--min-area", type=int, default=60)
     parser.add_argument("--max-area", type=int, default=3000)
-    parser.add_argument("--tone", type=int, default=238, help="min channel for 'blank paper'")
-    parser.add_argument("--chroma", type=int, default=2, help="max |R-B| for 'blank paper'")
+    parser.add_argument("--tone", type=int, default=228)
+    parser.add_argument("--chroma", type=int, default=6)
+    parser.add_argument("--ring", type=int, default=7)
+    parser.add_argument("--min-hair", type=float, default=0.6, help="required hair fraction in the ring")
     parser.add_argument("--checks", default=None)
+    parser.add_argument("--report", action="store_true")
     args = parser.parse_args()
 
     rgba = cv2.imread(args.image, cv2.IMREAD_UNCHANGED)
     if rgba is None or rgba.shape[2] != 4:
         raise SystemExit(f"{args.image} is not RGBA")
-    rgb = rgba[:, :, :3].astype(np.int16)
     alpha = rgba[:, :, 3]
+    # Work in RGB from here on: colour tests below read channel 2 as blue, and
+    # OpenCV's native order would make every one of them wrong.
+    rgb = cv2.cvtColor(rgba[:, :, :3], cv2.COLOR_BGR2RGB)
     height, width = alpha.shape
+    opaque = alpha > 128
 
-    neutral = (rgb.min(axis=2) >= args.tone) & (np.abs(rgb[:, :, 0] - rgb[:, :, 2]) <= args.chroma)
-    # Flood the whole neutral set from the border BEFORE any region limit.
+    neutral = (rgb.min(axis=2) >= args.tone) & (np.abs(rgb[:, :, 0].astype(np.int16) - rgb[:, :, 2]) <= args.chroma)
     free = neutral.astype(np.uint8)
     reach = np.zeros((height + 2, width + 2), np.uint8)
     cv2.floodFill(free, reach, (0, 0), 2)
@@ -72,32 +91,40 @@ def main() -> int:
     ys = np.arange(height)[:, None]
     xs = np.arange(width)[None, :]
     window = (ys >= y1) & (ys < y2) & ((xs < xl) | (xs > xr))
-    candidates = enclosed & window & (alpha > 0)
+    candidates = enclosed & window & opaque
 
     label, count = ndimage.label(candidates, structure=np.ones((3, 3)))
     sizes = ndimage.sum(candidates, label, range(1, count + 1)) if count else []
     cleared = np.zeros_like(candidates)
-    kept = []
+    kept, dropped = [], []
     for index, size in enumerate(sizes, start=1):
         if size < args.min_area or size > args.max_area:
             continue
-        cleared |= label == index
-        ys_, xs_ = np.where(label == index)
-        kept.append((int(size), int(xs_.min()), int(ys_.min()), int(xs_.max()), int(ys_.max())))
+        blob = (label == index).astype(np.uint8)
+        fraction = ring_hair_fraction(blob, opaque, rgb, args.ring, args.ring * 3)
+        yy, xx = np.where(blob > 0)
+        entry = (int(size), int(xx.min()), int(yy.min()), int(xx.max()), int(yy.max()), fraction)
+        if fraction >= args.min_hair:
+            cleared |= blob > 0
+            kept.append(entry)
+        else:
+            dropped.append(entry)
 
-    print(f"image            : {width}x{height}")
-    print(f"neutral white    : {neutral.mean()*100:.1f}%   enclosed by figure: {int(enclosed.sum())} px")
-    print(f"window           : y {y1}..{y2}, x < {xl} or x > {xr}   candidates {int(candidates.sum())} px in {count} blobs")
-    print(f"cleared          : {int(cleared.sum())} px in {len(kept)} blobs")
-    for size, x1, yy1, x2, yy2 in sorted(kept, reverse=True)[:8]:
-        print(f"   {size:>5} px  x {x1}..{x2}  y {yy1}..{yy2}")
+    print(f"image        : {width}x{height}")
+    print(f"window       : y {y1}..{y2}, x < {xl} or x > {xr}   candidates {int(candidates.sum())} px / {count} blobs")
+    print(f"cleared      : {int(cleared.sum())} px in {len(kept)} blobs (hair-ringed)")
+    for size, x1, yy1, x2, yy2, frac in sorted(kept, reverse=True)[:12]:
+        print(f"   keep {size:>5} px  x {x1}..{x2}  y {yy1}..{yy2}  hair in ring {frac*100:3.0f}%")
+    print(f"dropped      : {len(dropped)} blobs kept opaque (not ringed by hair)")
+    for size, x1, yy1, x2, yy2, frac in sorted(dropped, reverse=True)[:8]:
+        print(f"   drop {size:>5} px  x {x1}..{x2}  y {yy1}..{yy2}  hair in ring {frac*100:3.0f}%")
 
     out_alpha = alpha.copy()
     out_alpha[cleared] = 0
     out_alpha = cv2.GaussianBlur(out_alpha, (0, 0), sigmaX=0.8)
     out_alpha[cleared] = 0
 
-    result = np.dstack([rgb.astype(np.uint8)[:, :, ::-1], out_alpha])
+    result = np.dstack([rgb, out_alpha])
     Image.fromarray(result, mode="RGBA").save(args.out)
     print(f"-> {args.out}")
 
@@ -108,7 +135,7 @@ def main() -> int:
         for name, colour in (("light", (255, 255, 255)), ("dark", (13, 17, 23))):
             canvas = Image.new("RGB", image.size, colour)
             canvas.paste(image, (0, 0), image)
-            canvas.save(checks / f"hair-{name}.png")
+            canvas.save(checks / f"hair2-{name}.png")
         print(f"checks -> {checks}")
     return 0
 
