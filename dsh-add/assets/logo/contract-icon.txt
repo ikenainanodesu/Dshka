@@ -1,0 +1,16 @@
+This is a LOGO / app icon for a software tool, drawn as a clean chibi (Q-version) anime emblem. Follow this contract in order of authority.
+
+AUTHORITY 1 - CHARACTER DESIGN: reference is the authority for design, costume, colours and hair of DeepSeek whale-chan: deep-sea navy blue long hair grading to curly cyan tips, a wide round face with large deep-blue eyes, small nose, fixed blush, a pair of side whale-fin ears, a single forward-curving ahoge, a naturally attached whale tail, and her navy-and-white maid dress with a navy neck ribbon holding a sapphire, white frilled headdress, white frilled apron and collar, dark-gold piping. Copy that design faithfully.
+
+AUTHORITY 2 - PROPORTION: the character is chibi, about 3.5 heads tall, with an oversized head - EXACTLY the stylised proportion of the reference's chibi look: big head, small simple body, short rounded limbs. Never a tall realistic body.
+
+COMPOSITION - a HEAD-AND-SHOULDER EMBLEM, built for a small round icon:
+- The frame is dominated by the chibi whale-chan's HEAD and shoulders: her head fills roughly two thirds of the width, centred slightly high.
+- Only her head, shoulders and upper arms are inside the frame. Her long hair flows down both sides and is cropped naturally by the bottom edge. Do NOT draw her legs, feet, skirt hem or shoes - they are out of frame.
+- In the lower right, she rests one cheek and one small hand on a single rounded-square plugin cartridge: navy blue face, thin dark-gold border, two or three small gold contact pins along one edge, and a tiny white whale-tail glyph embossed on its face. She looks pleased and a little smug, as if she has just picked the right one.
+- Behind her, forming an uncluttered background pattern, float four more identical plugin cartridges of the same shape at clearly different depths: they are strongly desaturated, low-contrast, partly transparent and out of focus, reading as a soft flat pattern, never competing with her face. Same shape for every cartridge, no other floating objects.
+- Her whale tail appears once, curving up into the frame from the lower left, small.
+
+RENDERING - emblem, not a scene: single centred subject, very clean and readable, uncluttered, strong silhouette that still reads when shrunk to 48 pixels. Flat plain warm ivory background with NO scenery, NO ground shadow, NO border frame, NO text, NO letters, NO numbers, NO watermark, NO signature, NO logo lockup. Chunky confident line work, soft cel shading, restrained highlights, medium saturation.
+
+EXCLUSIONS: not a photograph, not a 3D render, not realistic proportions, no tall adult body, no full-body shot, no legs, no visible shoes, no extra limbs, no duplicate characters, no speech bubbles, no UI screenshots, no interface panels, no text of any kind anywhere in the image.

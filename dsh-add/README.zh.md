@@ -2,6 +2,8 @@
 
 [English](README.md) | **简体中文**
 
+<img src="assets/logo/logo.png" alt="dsh-add：Q 版 DeepSeek 鲸鱼娘从几只一模一样的插件方块里选中一个" width="320">
+
 按**名字**安装 [DeepSeek Harness](https://deepseek-harness.github.io/deepseek-harness/develop/basic/) 插件。
 
 ```sh
@@ -108,6 +110,15 @@ dsh-add --spec ./my-plugin            # 本地开发中的插件，按路径装
 | 单元测试 | `node test/resolve.test.mjs` — 18 项全部通过 |
 
 测试与在线验证是两件事：上表前 4 行是真实调用 `dsh plugin` 的端到端结果，最后一行只是单元测试。
+
+## Logo 与素材
+
+`assets/logo/` 里的定稿图是 Q 版造型：`logo.png`（512px 主图）、`logo-512/256/128.png`。
+
+- 生成走 OpenAI Codex 订阅（本项目硬规则：出图只用 Codex，本地模型不参与出图）。
+- 角色为社区二创形象「DeepSeek 鲸鱼娘」，身份锚点取自本地 `PERSONA.md`；**角色设计与立绘版权属原作者**（CC-BY-NC-SA 4.0），自用可以，**商用需另行授权**。
+- 头身比用 `headcount_proof.py` 实测：颅顶→脚底约 1050 px，头高约 280 px，**约 3.75 头身**。注意项目自带的自动检测器在这张图上给出 14.15 头身，是错的——该读数已弃用，改为画标定线目视核对后才得出上述数字。
+- `ref-q3.png` 是用 `build_proportion_ref.py` 合成的比例权威图（左＝设计权威，右＝按头数算出的骨架），`contract-icon.txt` 是生成时用的最高优先约束。
 
 ## 许可
 

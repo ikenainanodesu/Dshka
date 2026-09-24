@@ -2,6 +2,8 @@
 
 **English** | [简体中文](README.zh.md)
 
+<img src="assets/logo/logo.png" alt="dsh-add: chibi DeepSeek whale-chan picking one plugin cartridge out of several identical ones" width="320">
+
 Install a [DeepSeek Harness](https://deepseek-harness.github.io/deepseek-harness/develop/basic/) plugin **by name**.
 
 ```sh
@@ -105,6 +107,15 @@ Package names are not inferred from the spec alone: verification reads what is a
 | Unit tests | `node test/resolve.test.mjs` — 18 passing |
 
 Tests and online verification are different claims: the first four rows are real end-to-end `dsh plugin` runs; the last row is only unit tests.
+
+## Logo and assets
+
+`assets/logo/` holds the Q-version (chibi) mark: `logo.png` (512px, canonical) plus `logo-512/256/128.png`.
+
+- Generated through the OpenAI Codex subscription (this project's hard rule: Codex only for image generation; local models take no part).
+- The character is the community fan interpretation "DeepSeek whale-chan", with identity anchors taken from the local `PERSONA.md`. **The character design and artwork belong to their original authors** (CC-BY-NC-SA 4.0): personal use is fine, **commercial use needs separate permission**.
+- Head-to-body ratio measured with `headcount_proof.py`: skull-to-soles ≈ 1050 px over a ≈280 px head, i.e. **about 3.75 heads**. The bundled automatic detector reported 14.15 heads on this image, which is wrong; that reading is discarded and the number above comes from drawn calibration lines checked by eye.
+- `ref-q3.png` is the proportion-authority reference composed by `build_proportion_ref.py` (left = design authority, right = a skeleton computed for the requested head count); `contract-icon.txt` is the highest-priority constraint used for generation.
 
 ## License
 
