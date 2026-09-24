@@ -135,6 +135,23 @@ The two blurred plugin cartridges **remain in the transparent version**. That is
 
 Cutting along rows anyway would slice off hair, so it was not done. A figure-only version needs a fresh generation without the cartridges in the composition.
 
+### Watercolour version (low saturation)
+
+`logo-watercolor*.png` is the low-saturation watercolour take, in three strengths:
+
+| File | Colour kept | Note |
+|---|---|---|
+| `logo-watercolor.png` | 100% | the model's watercolour render as generated |
+| `logo-watercolor-desat70.png` | 70% | **recommended**: clearly desaturated while the watercolour's warm/cool layering and blue identity survive |
+| `logo-watercolor-desat50.png` | 50% | greyer and flatter; use with care |
+
+Each strength ships as square 512/256/128 (scaled to fit and centred on the paper, never cropped or distorted).
+
+- The regeneration contract forbade any background blocks, sparkles or particles — only the character and the one cartridge in her hands — so **this version's background is clean**, which sidesteps the "cartridges welded to the figure" problem the earlier version hit.
+- Desaturation preserves luma: `out = gray + (c − gray) × k`, not a direct cut of HSV saturation (which drags brightness down and looks muddy).
+- The bleeding, paper tooth and spatter are **painted**, not filterable: a desaturation filter only removes colour and cannot create watercolour texture, which is why this version was regenerated rather than processed.
+- The square versions carry the paper background, so **they show as a cream square on dark backgrounds**. A transparent build needs a separate keying pass, and the watercolour bleeding means keying will cost some of the effect.
+
 ## License
 
 MIT
