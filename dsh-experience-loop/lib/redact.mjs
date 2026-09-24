@@ -1,11 +1,10 @@
 /**
- * Sensitive-information gate.
+ * Best-effort sensitive-information filtering, not a universal safety boundary.
  *
- * Every byte that could become a long-lived Experience passes through
- * `redactText` first: the model's review payload, the deterministic episode
- * journal, and imported records. The rule is *redact, then judge* — a
- * credential inside an otherwise useful lesson must not poison the whole
- * lesson, but a payload that is nothing but credentials must never be stored.
+ * Review payloads, episode text and imports use recognized-pattern redaction.
+ * Useful lessons can survive after matching spans are replaced; detected
+ * credential-only payloads can be rejected. Unknown secrets and identifying
+ * text may remain, so inspect stored or exported material before sharing.
  */
 
 /** Marker left in place of a redacted span; greppable and unmistakable. */

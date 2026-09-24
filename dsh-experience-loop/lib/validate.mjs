@@ -104,10 +104,8 @@ export function checkArgs(schema, args) {
   if (args === null || typeof args !== 'object' || Array.isArray(args)) {
     // A malformed payload reaches here as the RAW string, because the harness
     // could not parse it. Say WHY rather than only that it was not an object:
-    // a measured session lost 6 of 25 `experience_review` calls to one stray
-    // trailing brace, and the model can fix that in one retry if it is told the
-    // syntax error. The payload is never repaired here — guessing at malformed
-    // JSON is how a validator starts accepting things nobody wrote.
+    // report the syntax error so the caller can correct its payload. Never
+    // repair malformed JSON here: guessing could accept unintended content.
     if (typeof args === 'string') {
       try {
         JSON.parse(args)

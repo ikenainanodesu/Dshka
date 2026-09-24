@@ -2,9 +2,9 @@
  * Observed outcome attribution — the loop closing itself.
  *
  * The property under test is not "does a counter move". It is that a learned
- * skill can reach `verified`, and therefore become loadable and reusable,
- * WITHOUT a model volunteering an outcome it almost never volunteers (measured:
- * 3 of 25 reviews in a real session carried `outcomes`).
+ * skill can reach `verified` through observed signals without an explicit
+ * model-reported outcome. These tests establish attribution behavior, not
+ * that a completed turn proves the skill was effective.
  *
  * Just as important is the other half: the signals that are recorded but must
  * NOT score. A turn that merely RECEIVED an injected block tells us nothing
@@ -212,10 +212,7 @@ test('surfacing a record is counted but never scored', async () => {
     const { record } = await learnSkill(host, agent)
     const confidence = record.confidence
 
-    // Three turns that receive the injected block and complete cleanly. If
-    // "the turn finished" were treated as success, this would promote the
-    // record — and 41 of 43 closed turns in a measured session finished, so it
-    // would promote essentially everything.
+    // Completing turns after mere exposure must not promote an unused record.
     for (const turn of [1, 3, 5]) {
       runtime.outcomes.noteInjection(String(agent.session.id), turn, [record.id])
       playTurn(host, { session: agent.session, turn })
@@ -293,9 +290,8 @@ test('the injected block only calls a skill loadable when it actually is', async
     cleanup(defaultRun.root)
   }
 
-  // Under `verified` the catalog withholds it, so the claim would be a lie. A
-  // measured real session had this line offering five learned skills that a
-  // `skill` call would have refused.
+  // Under `verified`, do not advertise a candidate as model-loadable when the
+  // catalog withholds it.
   const gatedRun = boot({ exposeSkills: 'verified' })
   try {
     const { host, agent } = gatedRun

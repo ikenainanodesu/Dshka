@@ -2,11 +2,9 @@
  * Observed outcome attribution — the part of the loop that does not need the
  * model to volunteer anything.
  *
- * The problem this solves, measured on a real 45-turn project session: of 25
- * `experience_review` calls, only THREE carried `outcomes`. Confidence moves
- * only through an outcome, so 23 of 24 records sat at `candidate` with
- * `useCount` 0 forever, and a skill the model had refined to version 2 was
- * still invisible to its own catalog. The loop was write-only.
+ * Reviews may omit explicit outcomes. This module attributes loaded skills
+ * using turn-end events so lifecycle updates can also use observed signals.
+ * Completion/error is a heuristic, not proof of skill efficacy or causation.
  *
  * What makes this module different from the model-reported path is the SOURCE
  * of the evidence: these are facts the plugin already sees on `session/event`,
@@ -29,11 +27,8 @@
  *
  *   SURFACED (recorded, deliberately NOT scored)
  *     The record appeared in an injected retrieval block. This is NOT evidence
- *     of use, and it has no discriminating power either: 41 of 43 closed turns
- *     in the measured session ended `completed`, so treating "completed" as
- *     success would promote essentially everything and make `verified`
- *     meaningless. The counter exists so an operator can see the loop moving
- *     and find records that keep surfacing without ever being used.
+ *     of use, so turn completion must not promote a merely surfaced record.
+ *     The counter helps identify records that surface without being loaded.
  *
  * A record can therefore still reach `verified` automatically, but only by
  * being genuinely picked up and surviving the turn. Nothing here writes an

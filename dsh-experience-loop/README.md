@@ -1,273 +1,247 @@
 # dsh-experience-loop
 
-A bounded, auditable continual-learning loop for [DeepSeek Harness](https://deepseek-harness.github.io/deepseek-harness/develop/basic/):
+A bounded, auditable experience loop for [DeepSeek Harness](https://deepseek-harness.github.io/deepseek-harness/develop/basic/):
 **execute → validate → review → distil → reuse → revise**.
 
-The goal is not to store more text. The goal is that the *second* time the same
-kind of problem appears, the agent needs fewer searches, fewer inferences and
-fewer failed attempts — and that you can see, edit and delete everything it
-learned.
+The plugin stores reusable lessons locally, retrieves relevant summaries before a
+step, and exposes learned skills through the harness skill catalog. Its goal is
+less repeated investigation, not more stored text. Improvement must be evaluated;
+the plugin does not guarantee better results.
 
-```
+```text
 user task
-   │
-   ├─ agent/pre-step ─────────────► retrieve top-K relevant experience (hard budget)
-   │                                 · environment gate: platform / shell / project
-   │                                 · keyword coverage + confidence + recency + reliability
-   │
-   ├─ tools execute ──────────────► session/event ─► one redacted episode line per turn
-   │                                                    (EVIDENCE, never an Experience)
-   │
-   └─ experience_review (once) ───► dedupe / conflict / merge / supersede / deprecate
-                                     └─► Memory · Skill · Failure · Validation
-                                           └─► verified Skills become harness skills
+   ├─ agent/pre-step → bounded retrieval, environment gates and keyword ranking
+   ├─ session/event  → redacted per-turn evidence journal (not a lesson)
+   └─ experience_review → create / merge / conflict / supersede / outcome
+                             └─ Memory · Skill · Failure · Validation
+                                  └─ eligible skills enter the harness catalog
 ```
 
----
-
-## Why it is built the way it is
+## Design
 
 | Decision | Reason |
 |---|---|
-| **Zero `@deepseek-ai/*` imports** | A locally developed plugin is installed as a symlink, and Node resolves a symlinked ESM module to its *real* path — so the host packages hoisted under the profile's `node_modules` become unreachable. Staying on Node builtins means the plugin works under every install shape (symlink, copy, `file://` row, npm). The two host helpers that would be convenient are trivially replaceable, and both replacement contracts were verified against the real host: `createUserMessage` only mints `{id: <uuid>, role: 'user', …}`; `defineTool` only compiles an author schema into raw JSON Schema, which is exactly what `ToolSchema.parameters` takes. |
-| **No exported `Config` schema** | A schema would require `@deepseek-ai/schemastery`. `lib/config.mjs` validates and clamps every field itself and reports unknown keys as warnings, so a typo in a patch row is visible in the log instead of silently ignored. |
-| **Plain JSON + Markdown store, not `ctx.storageDomain`** | A schema-validated domain refuses to open on *one* malformed record, and hand-editing a record is an explicit requirement. Plain files are transparent, migratable and backup-friendly, and a bad file degrades to an empty view of that scope instead of locking the store out. The plugin adds no dependency at all. |
-| **Skills reuse `ctx.skills`** | Rather than growing a private skill loader, learned skills are exposed through a runtime `SkillProvider`, so discovery, cataloguing, invalidation and the `skill` tool all stay the host's business. |
-| **Only *verified* skills are advertised** | The harness skill catalog costs `skills × description length` on **every** request. A brand-new candidate must not sit in every prompt before anything has validated it. |
-| **Review is model-driven, capture is deterministic** | Raw tool calls must never become Experience by themselves — that is how an experience base fills with noise. Turn evidence is written to a journal; only a distilled `experience_review` payload becomes a record. |
-
----
+| No `@deepseek-ai/*` runtime imports | Node builtins avoid host-package resolution problems with local symlink or file-path installs. Host API compatibility still depends on the installed harness version. |
+| No exported `Config` schema | `lib/config.mjs` validates and clamps settings and warns about unknown keys without importing a schema package. |
+| Plain JSON + Markdown storage | Records are inspectable and backup-friendly. Malformed scope files log a warning and load as an empty view; preserve the original before any write or recovery attempt. |
+| Native `ctx.skills` provider | The host handles skill discovery, loading and catalog invalidation. |
+| Bounded candidate visibility | Default `exposeSkills: all` makes candidates discoverable, with an explicit unproven marker and shorter descriptions; the catalog is capped. |
+| Model-driven distillation | Raw events are evidence only. They do not automatically become lessons. |
 
 ## Install
 
-### Local development (what this checkout uses)
+### Local checkout
 
-1. Append one row to the profile patch — `%DSH_HOME%\profiles\<profile>\cordis.patch.yml`:
+Back up your profile patch before editing it. Append an `insert` entry to
+`<DSH_HOME>/profiles/<profile>/cordis.patch.yml`, replacing the placeholder with
+your checkout path:
 
-   ```yaml
-   - insert:
-       - id: experience-loop
-         name: '<path-to-this-checkout>\dsh-experience-loop\index.mjs'
-   ```
+```yaml
+- insert:
+    - id: experience-loop
+      name: '<checkout>/dsh-experience-loop/index.mjs'
+```
 
-   dsh's patch loader rewrites an absolute path (or a patch-relative `./`/`../`
-   path) in `insert[].name` into a `file://` URL at parse time
-   (`dsh-app-boot` → `anchorInsertedPluginNames`), so no `pnpm install`, no
-   registry and no publish are involved.
-
-2. If the profile sets `patchReload: live` (the `web` profile does), the row is
-   picked up **without restarting dsh**. Boot errors are contained: a failed
-   reload logs and keeps the last good tree running.
+The harness patch loader anchors absolute paths and patch-relative `./` or `../`
+paths in `insert[].name` as file URLs. No package publication is needed.
+For a profile with `patchReload: live`, configuration changes can be picked up
+without a restart. Check reload logs and the effective row; a failed reload may
+leave the previous configuration active.
 
 ### Packaged install
 
-The package declares `dsh.bundle`, so it is also a normal bundle layer:
+The package declares `dsh.bundle` and can be added as a bundle layer:
 
 ```sh
-dsh plugin --profile web add D:\path\to\dsh-experience-loop
+dsh plugin --profile web add <path-to-plugin>
 ```
 
-### Verify it really loaded
+### Verify loading and code activation
+
+From the plugin directory, inspect locally:
 
 ```sh
-node tools/read-session-log.mjs "%DSH_HOME%\sessions\--<cwd>--\<session-id>\session.v3.jsonl.zstd" "experience"
+node tools/validate-profile-row.mjs --profile web
+node tools/read-session-log.mjs <session.jsonl.zstd> "Experience Loop"
 ```
 
-A loaded plugin leaves durable traces. Check all three:
+Useful traces include `## Experience Loop` in a `system/message` event and
+`experience_review` / `experience_query` in a `request/header` tool list.
+The store directory appears after a write. These are supporting evidence, not
+proof that the current process has loaded the newest code: unchanged prompt and
+tool metadata can remain in older log events.
 
-1. the latest `system/message` event contains `## Experience Loop`;
-2. the latest `request/header` event's `tools` array contains
-   `experience_review` and `experience_query`;
-3. `<storeRoot>` appears on disk after the first write.
+Call `experience_query` with `action: "stats"` in the current session to verify
+the tool is callable. To verify a code change, use a safe probe that distinguishes
+the changed behavior from the previous behavior. Do not create or supersede real
+records just to test loading. A silent start, directory existence or exit code 0
+alone does not establish success.
 
-It has **not** loaded if you only see "no error". `exit code 0`, a silent start,
-or a clean `--dump-config` prove nothing.
+Configuration reload and module reload are separate mechanisms. Saving `.mjs`
+files or enabling a watcher does not prove that an already-loaded module changed.
+A controlled harness restart followed by a distinguishing probe is the reliable
+baseline; module hot reload depends on host version and setup.
 
 ### Uninstall
 
-Remove the `insert` row (or `dsh plugin --profile web remove dsh-experience-loop`).
-Your data in `<storeRoot>` is untouched. To erase everything the plugin knows,
-delete `<storeRoot>`.
+Remove the local `insert` entry, or remove the packaged bundle:
 
-> **Two reload mechanisms — only one of them works without a restart (measured).**
-> A `config:` edit on the row **does** reach the running plugin: the entry is
-> re-created and `apply()` re-runs with the new config object, in *both*
-> directions — a live config value was observed following the row `25 → 7 → 25`
-> inside a single process, with no restart and no code reload. A comment-only
-> patch edit is a no-op for the same reason; a real value must change.
->
-> An edit to the plugin's own `.mjs` does **not** take effect. The base `hmr` row
-> ships `disabled: true` and the launcher mounts hmr with `root: []`, so no module
-> file is watched. **Measured negative:** setting `hmr` to `disabled: false` with
-> `root: ['<path-to-this-checkout>/dsh-experience-loop']` and then rewriting *every*
-> module in place (including `index.mjs`) produced **no reload** — a probe that
-> only the newer code can satisfy still failed, so the original module was still
-> loaded. Do not assume that enabling module reload, or saving a file, activates a
-> change.
->
-> **A `dsh` restart is the reliable way to activate a code change.** If you want
-> live iteration, mount the plugin as a bundle layer and enable module reload
-> *before* its first load, rather than retrofitting it onto a running instance.
+```sh
+dsh plugin --profile web remove dsh-experience-loop
+```
 
----
+Stored data is retained. Back it up and confirm the resolved `storeRoot` before
+any intentional deletion.
 
 ## Configuration
 
-On the `experience-loop` row of your profile patch. Every field is optional.
+The following patches an existing entry; for a new entry place `config` under
+its `insert` row. All fields are optional.
 
 ```yaml
 - id: experience-loop
   config:
-    enabled: true              # false = mount nothing at all (no tools, hooks, prompt section)
-    storeRoot: null            # default: %DSH_HOME%/experience-loop
+    enabled: true              # false: register no tools, hooks or prompt section
+    storeRoot: null            # default: <DSH_HOME>/experience-loop
     inject:
-      enabled: true            # retrieval before a step
+      enabled: true
       topK: 4                  # max records per injection (1..12)
-      budgetChars: 1800        # HARD character bound for the whole injected block
-      minScore: 0.32           # 0..1
-      cooldownTurns: 1         # suppress re-injection for N consecutive turns
-      maxPerSession: 60        # hard cap on injections per session
-      subagents: false         # skip retrieval for subagent sessions (default: skip)
-    learn: true                # allow experience_review to write
-    captureEpisodes: true      # write the per-turn evidence journal
+      budgetChars: 1800        # bound for the injected block
+      minScore: 0.32
+      cooldownTurns: 1
+      maxPerSession: 60
+      subagents: false
+    learn: true
+    captureEpisodes: true
     episodeRetention: 400
     episodeAskChars: 400
-    askContextChars: 1200      # how much of the previous assistant turn may serve as referent
+    askContextChars: 1200
     exposeSkills: all          # all | verified | none
     maxExposedSkills: 40
-    skillDescriptionChars: 300        # a VERIFIED skill's catalog line
-    candidateDescriptionChars: 160    # a CANDIDATE's WHOLE line, marker included
-    defaultScope: project      # scope when a review entry omits one
+    skillDescriptionChars: 300       # verified description
+    candidateDescriptionChars: 160   # candidate description, marker included
+    defaultScope: project
     recencyHalfLifeDays: 45
     weights: { relevance: 1.0, confidence: 0.6, environment: 0.5, recency: 0.25, reliability: 0.4 }
-    promoteConfidence: 0.7     # candidate -> verified
+    promoteConfidence: 0.7
     promoteSuccesses: 2
     deprecateConfidence: 0.15
     autoDeprecate: true
-    observeOutcomes: true      # credit observed skill use / turn outcome (see below)
+    observeOutcomes: true
 ```
 
----
+### Candidate visibility
 
-## Short replies: no threshold, an explicit referent instead
+By default, non-deprecated skills are eligible for the catalog. Verified skills
+sort first, then confidence; `maxExposedSkills` defaults to **40** and can omit
+skills of either status when the cap is reached. Candidate descriptions have a
+**160-character** default budget including `[candidate - unproven]`; verified
+descriptions default to **300 characters**. These are description limits, not a
+guarantee about the total rendered host catalog size.
 
-A user answering a multiple-choice question may reply with a single character
-(`C`), and a short confirmation (`好`, `用 B`) is just as real. Such a reply is a
-**complete request whose meaning lives in what it answers**, so the plugin never
-treats it as noise — and it does **not** decide by shape. A character or token
-count is an arbitrary constant that both misses real replies and discards real
-short requests. Retrieval is **two-pass**, and the decision is made by outcome:
+The model's `skill` tool resolves names through the catalog, so a hidden candidate
+cannot be loaded through that route. `exposeSkills: verified` and `none` are
+available for stricter discovery policies. The provider's direct `get` path can
+serve explicitly named non-deprecated candidates under `verified`; `none` disables
+that path as well. Deprecated skills are not offered.
 
-```
-pass 1  the request in the user's own words
-        └─ found something → done. Nothing else is even computed, so a long
-           prompt is never diluted by context.
-pass 2  only if pass 1 found nothing, retry with the REFERENT attached:
-        · the canonical OPTION the reply selected, when the agent posed a
-          choice — the candidate set is known, so this is a lookup
-        · the preceding assistant turn, as the weaker fallback
-```
+### Short replies
 
-The referent comes from the harness itself. `ctx.userQuestions` dispatches the
-**`user-questions/request`** waterfall carrying `questions[].options[].label`,
-and `ask_user_question` returns the answer with `selected: string[]` (canonical
-labels) or `custom` (free text). The plugin subscribes, **observes, and delegates
-with `next()`** — it never claims, answers, or delays a question. Matching then
-follows a deterministic ladder, in `lib/slate.mjs`:
+Retrieval first tries the user's own words. Only if that finds nothing does it
+retry with a referent: the canonical option selected from a posed question, or
+the previous assistant message as a weaker fallback. There is no short-message
+length threshold.
 
-```
-bare number · letter (A/B/C) · ordinal (1st, first, 第三, 3번, 세번째)
-  → exact label, ignoring enumerations and decorations like (recommended)
-    → unique distinctive fragment
-      0 matches → nothing (fall back to the conversation)
-      ≥2 matches → FAIL CLOSED, never a guess
-```
+`user-questions/request` is observed and delegated with `next()`. The plugin does
+not claim or answer the question. Matching tries positions (numbers, letters and
+ordinals), exact labels, then unique fragments; ambiguous matches are refused.
+The journal retains `ask` and, when available, resolved `askContext` after
+redaction. Resolution itself requires no extra model call; any resulting
+injection still consumes context within the configured budget.
 
-The pattern is the one NousResearch/hermes-agent uses for its native `clarify`
-prompts ([issue #96954](https://github.com/NousResearch/hermes-agent/issues/96954)):
-deterministic, no model call, ambiguous input refused rather than guessed, and
-the **canonical option text** returned rather than the user's abbreviation.
-The letter tier is an addition that fits this harness, where the Web UI labels
-choices `A / B / C`.
+## Record types and lifecycle
 
-Cost: **zero extra model tokens** — nothing new is sent, and the option set is
-already in the transcript as the `ask_user_question` call's arguments. The only
-effect is that a turn which today is skipped may now inject, bounded by the same
-`injectTopK` / `injectBudgetChars` / `injectMaxPerSession` caps.
-
-The journal keeps the user's exact words in `ask` **and** the resolved form in
-`askContext`, so a one-letter answer stays identifiable as a task later — even
-after compaction has hidden the question itself.
-
-Skipping short requests outright — the first implementation — disabled retrieval
-for exactly the turns where a stored lesson would matter most.
-
----
-
-## The four kinds of Experience
-
-| Type | Answers | Key body fields |
+| Type | Purpose | Typical body fields |
 |---|---|---|
-| `memory` | *What do I already know about this user, machine or project?* | `fact`, `details` |
-| `skill` | *How should this class of problem be handled?* | `purpose`, `trigger`, `preconditions`, `environment`, `steps`, `validation`, `failureHandling`, `pitfalls`, `rollback`, `examples` |
-| `failure` | *What did I try that failed, and why?* | `attempted`, `symptom`, `cause`, `avoidance` |
-| `validation` | *How do I prove the task is actually done?* | `target`, `signals`, `negativeCase` |
+| `memory` | Stable facts about a user, environment or project | `fact`, `details` |
+| `skill` | Reusable procedure | `purpose`, `trigger`, `steps`, `validation`, `pitfalls`, `rollback` |
+| `failure` | Failed approach and how to avoid it | `attempted`, `symptom`, `cause`, `avoidance` |
+| `validation` | Evidence that an outcome actually works | `target`, `signals`, `negativeCase` |
 
-`exit code 0` is **not** task success, and the `validation` type is where that
-rule becomes concrete: process → service → API → business function.
+Records carry a generated ID (for example, the synthetic `exp_example`), status,
+scope, applicability, confidence, counters, provenance and timestamps. Project
+keys derive from absolute paths and are **not anonymization**. Platform and shell
+mismatches are hard retrieval gates; project/runtime mismatches reduce score.
 
-### Record shape
+New records start as candidates. Outcome updates can promote them using the
+configured success/confidence thresholds; `/experience verify` is a human
+override. Failures can lower confidence and trigger deprecation. Superseding a
+record explicitly withdraws the old one. `verified` describes lifecycle state,
+not independently proven correctness.
 
-```jsonc
-{
-  "id": "exp_example_record",
-  "type": "skill",
-  "status": "candidate",              // candidate | verified | deprecated
-  "scope": { "level": "project", "project": "C-work-example-project", "projectPath": "C:\\work\\example-project" },
-  "title": "Docker service recovery",
-  "summary": "Recover a Docker service that will not stay up, then prove it is healthy.",
-  "body": { "steps": ["…"], "validation": ["…"] },
-  "applies": { "platform": "win32", "shell": "pwsh", "runtime": "docker-desktop", "tags": ["docker"] },
-  "confidence": 0.56, "successCount": 2, "failureCount": 0, "useCount": 2,
-  "pinned": false, "version": 2,
-  "supersedes": null, "supersededBy": null, "conflictsWith": [],
-  "evidence": [{ "kind": "review", "sessionId": "…", "at": "…", "note": "…" }],
-  "source": "agent", "redactions": ["openai-style-key"],
-  "skillName": "exp-docker-service-recovery",
-  "createdAt": "…", "updatedAt": "…", "lastUsedAt": "…"
-}
-```
+- Near-identical records merge at similarity ≥ 0.72, preserving the ID and
+  incrementing the version.
+- Partial overlap (0.4 ≤ similarity < 0.72) is surfaced as a conflict, not silently
+  resolved.
+- List merges preserve existing steps. An explicit `mergeInto` with
+  `replaceLists: true` allows authoritative replacement of supplied list fields.
 
-**Every record knows when it applies.** `applies.platform` and `applies.shell`
-are *hard gates* — a Windows-only procedure is never offered on Linux — while a
-project or runtime mismatch is a score penalty, not a gate.
+## Observed outcomes: a heuristic, not an efficacy test
 
----
+With `observeOutcomes: true`, session events provide a second outcome source in
+addition to model-reported `outcomes`:
 
-## Storage layout
+| Signal | Treatment |
+|---|---|
+| Learned skill loaded; turn ends `completed` | Observed success; may promote |
+| Learned skill loaded; turn ends `error` | Observed failure; may deprecate |
+| Turn ends `aborted`, `interrupted`, `blocked` or `max-tokens` | No outcome score |
+| Record only appears in a retrieval block | Surfacing counter only |
+| Skill load fails | Load-failure reporting, not credited use |
 
-`storeRoot` defaults to `%DSH_HOME%\experience-loop`.
+Loading is not proof of following a procedure. A completed turn may contain a
+wrong answer, and an error may be unrelated to the skill. These signals are
+**heuristic attribution**, not evidence that the skill caused success or failure.
+Inspect the task result and provenance; disable automatic observation if that
+tradeoff is unsuitable. Observed labels such as `observed:skill-used` and
+`observed:skill-failed` distinguish this path from explicit model reports.
+
+## Storage and privacy
+
+The default root is `<DSH_HOME>/experience-loop`.
 
 | Path | Contents |
 |---|---|
-| `global/experiences.json` | Experience valid across projects |
-| `projects/<key>/experiences.json` | Experience for one project root (key = sanitized absolute path) |
-| `episodes.jsonl` | Append-only evidence journal, one line per finished turn — never injected verbatim |
-| `audit.jsonl` | Append-only trail of every create / merge / conflict / supersede / outcome / pin / status / deprecate / delete |
-| `state.json` | Counters used by `stats` and `metric` |
-| `digest.md` | Generated human-readable summary |
-| `HOW-TO-EDIT.md` | Generated editing/removal instructions |
+| `global/experiences.json` | Cross-project records |
+| `projects/<key>/experiences.json` | Project-scoped records |
+| `episodes.jsonl` | Per-turn evidence journal; never injected verbatim |
+| `audit.jsonl` | Change and outcome audit trail |
+| `state.json` | Aggregate counters |
+| `digest.md` | Generated summary |
+| `HOW-TO-EDIT.md` | Editing/removal instructions |
 
-All writes are atomic (temp file + rename). A malformed document degrades to an
-empty view of that scope and logs a warning; it never throws into the harness.
+Snapshot files use temporary-file replacement; journals append entries. Back up
+before manual maintenance, and stop the owning process before editing cached
+records so a later flush cannot overwrite your edits.
 
----
+The redactor in `lib/redact.mjs` is **best effort**, not a universal safety
+boundary. It recognizes selected credential formats, private-key blocks,
+authorization headers, cookies, connection credentials and contextual one-time
+codes. Useful text can survive after recognized spans are replaced; a
+credential-only review can be rejected. Unrecognized secrets, private project
+names, paths and identifying text can remain.
 
-## Observability and human control
+Do not store credentials intentionally. Inspect exports, digests, journals,
+profile output and logs manually before sharing, even in a private repository.
+`/experience redact <text>` previews matching behavior; it does not certify safety.
+Records are advisory evidence and cannot grant permissions or override current
+instructions or sandbox policy.
 
-`/experience <subcommand>` (a human command — it never reaches the model):
+## Human control and diagnostics
 
-```
+`/experience` commands are handled locally, not sent as model requests:
+
+```text
 list [type] [limit]     search <text>       show <id>       stats
 metric                  conflicts           pending         deprecated
 projects                audit [n]           digest          redact <text>
@@ -277,261 +251,63 @@ export [path]           import <path>       forget-project [key]
 on | off                help
 ```
 
-The `experience_query` tool exposes the same read surface to the model
-(`search|list|show|stats|conflicts|pending|deprecated|projects|metric|audit`).
+The model's `experience_query` exposes the read surface:
+`search|list|show|stats|conflicts|pending|deprecated|projects|metric|audit`.
 
-`/experience stats` reports totals, per-type and per-status counts, counters,
-outstanding conflicts and the number of unreviewed turns. `/experience redact
-<text>` shows exactly what the secret filter would store — useful for verifying
-the safety guarantee by inspection rather than by trust.
-
----
-
-## Safety
-
-- **Every** byte that could become a long-lived record passes through
-  `lib/redact.mjs`: the review payload, the episode journal, and imports.
-- Recognised: private-key blocks, AWS / GitHub / Slack / OpenAI-style / Anthropic
-  keys, JWTs, `Authorization` headers, cookies, credential assignments
-  (`password=…`, `api_key: …`), `*_TOKEN=…` environment exports, connection
-  strings with inline credentials, and one-time codes in their own context.
-- **Redact, then judge**: a credential inside an otherwise useful lesson is
-  replaced with `«redacted:<rule>»` and the lesson survives; a payload that is
-  *nothing but* credentials is rejected outright.
-- Records carry no authority. Experience is advisory context, never an
-  instruction, and the current user request always wins. Nothing here can grant
-  a permission, pre-approve a tool call, or bypass the sandbox or approval
-  policy.
-
----
-
-## Lifecycle
-
-```
-create → candidate ──(2 successes, or confidence ≥ 0.7, or /experience verify)──► verified
-              │                                                                     │
-              │◄───────────────────── success on a deprecated record ───────────────┤
-              ▼                                                                     ▼
-          deprecated ◄──(explicit supersede / /experience deprecate / auto: ≥2 failures at conf ≤ 0.15)
-```
-
-- A near-identical restatement (similarity ≥ 0.72) **merges into the existing
-  record** — same id, `version + 1`. It never creates a v2 copy.
-- A partially overlapping neighbour (0.4 ≤ similarity < 0.72) is recorded as a
-  **conflict**: both records survive, both are linked, the new one is held at
-  `candidate`, and the audit entry stores old / new / reason / environment
-  difference / decision. Nothing is silently overwritten.
-- List fields merge without losing steps: a longer list is a superset, so its
-  **order is adopted** (that is how "check DNS first" moves a step to the front);
-  a shorter list only appends unless the review sets `replaceLists: true`.
-
----
-
-## Closing the loop without asking the model
-
-`/experience metric` aside, the loop has a second input that does not depend on
-anyone volunteering anything: **observed outcomes** (`observeOutcomes`, on by
-default).
-
-The problem it solves was measured, not imagined. In a real 45-turn project
-session the agent called `experience_review` 25 times, but only **3** of those
-calls carried an `outcomes` field. Confidence moves *only* through an outcome,
-so 23 of 24 records sat at `candidate` with `useCount` 0 forever — including a
-skill the agent had itself refined to version 2. The loop was write-only.
-
-So the plugin now credits evidence it already sees in the durable session event
-stream, at zero extra model calls and zero extra context:
-
-| Signal | Source | Scores? |
-|---|---|---|
-| Skill loaded, turn ended `completed` | `tool/call` named `skill`, or a `/skill-name` gesture | **success** — moves confidence, can promote |
-| Skill loaded, turn ended `error` | as above | **failure** — moves confidence, can deprecate |
-| Skill loaded, turn `aborted` / `interrupted` / `blocked` / `max-tokens` | as above | no — a user hitting stop is not evidence about a record |
-| Record merely appeared in an injected block | the retrieval block | **no** — `surfacedCount` only |
-
-The last row is the important refusal. Exposure is not use, and "the turn
-finished" has no discriminating power: 41 of 43 closed turns in that measured
-session ended `completed`, so scoring it would have promoted essentially
-everything and made `verified` mean nothing. That counter exists so an operator
-can see the loop moving and spot records that keep surfacing without ever being
-picked up — not so the scoreboard looks busy.
-
-Every observed outcome is labelled as such (`observed:skill-used`,
-`observed:skill-failed`), so a self-report and an observation are never confused:
-
-```sh
-/experience show <id>
-# - observed outcomes: 2 ok / 0 failed (not model-reported)
-# - last outcome: observed:skill-used (success) at <timestamp>
-# - surfaced in 7 turn(s), never scored on that alone
-```
-
-### Why every candidate is in the catalog
-
-The first shipped version exposed only `verified` skills, and that turned out to
-be a deadlock rather than a policy. `dsh-tool-skill` resolves a requested name
-against the provider's catalog and refuses anything absent:
-
-```js
-// @deepseek-ai/dsh-tool-skill/lib/index.js
-const summary = (await ctx.skills.list(lookup)).find((skill) => skill.name === args.name)
-if (!summary) throw new Error(`skill "${args.name}" is unknown or no longer available`)
-```
-
-So a hidden candidate cannot be loaded *by anyone*, which means it can never be
-exercised, which means it can never earn the observed outcome that would promote
-it. Measured over 37 hours of real use: 27 learned skills, **25 stuck at
-`candidate`**, 7 observed skill uses, and **0 promotions** — the only skill that
-ever accumulated observed uses was the one that was already verified.
-
-The gate is therefore gone, but not the cost control. A candidate is listed with
-a **shorter description** and an explicit `[candidate - unproven]` marker, and
-`get()` still refuses deprecated records and still serves them by name for the
-human's `/skill-name` gesture. On this repo's real store that is **13 skills /
-2063 chars per request** instead of 1 skill / 192 chars — about 1.9 KB to make
-12 more skills loadable, with 10 of the 12 candidate lines truncated by the
-shorter tier. `exposeSkills: verified` and `none` remain available.
-
-> This mirrors how Hermes Agent does it. Its `prompt_builder.py` decides
-> visibility with `hides()`, which filters only on explicitly-disabled names,
-> platform and tool availability — there is **no** status/confidence/provenance
-> gate, and its own comment says why: *"NEVER drop entries — agent-created
-> skills are the model's project memory and it won't rediscover them via
-> skills_list."* It pays for the catalog with one line per skill and loads
-> bodies on demand, which is exactly the trade made here.
-
----
-
-## Measuring whether it works
-
-`/experience metric` — or `experience_query {action:"metric"}` — compares the
-**first** run of a task signature with the runs that followed it, using the real
-per-turn tool-call counts recorded in `episodes.jsonl`:
-
-```
-Repeated task groups: 3
-First run average tool calls: 14.33
-Later runs average tool calls: 6
-Reduction: 58.1%
-```
-
-Other observable counters in `/experience stats`: injections and injected
-characters, reviews, records created/merged/rejected, model-reported success and
-failure outcomes, **observed** skill uses and failures, records merely surfaced,
-advertised-but-unloadable skills, conflicts seen, sensitive spans redacted.
-
-> This metric becomes meaningful only after the same kind of task has actually
-> been performed more than once in the same environment. Until then it says so.
-
----
+`metric` compares first and later tool-call counts for request groups identified
+by vocabulary similarity within a workspace. Short or truncated requests may be
+excluded. It needs comparable repetitions and reports when there are none.
+Lower tool-call counts alone do not establish improved quality, causal benefit,
+or equal task difficulty; inspect outcomes and confounders rather than treating
+this metric as proof of improvement.
 
 ## Development
 
+Run from `dsh-experience-loop/`:
+
 ```sh
-node tools/run-tests.mjs       # 73 tests, all in ONE process
-node --test test/              # same suite, one child per file (needs process spawn)
-node tools/smoke.mjs           # offline end-to-end demo; prints every artefact
+node tools/run-tests.mjs       # suite in one process
+node --test test/              # alternative; requires child-process support
+node tools/smoke.mjs           # offline demo using temporary data
 node tools/check-retrieval.mjs --store <root> --cwd <dir> --ask '<text>'
 node tools/check-retrieval.mjs --store <root> --from-session <session.jsonl.zstd>
 node tools/read-session-log.mjs <log.jsonl.zstd> [needle]
-node tools/validate-profile-row.mjs [--profile web] [--id experience-loop] [--file <candidate patch>]
-node tools/profile-row.mjs show|disable|enable|remove [--id experience-loop]
-node tools/status.mjs [--limit n] [--session <id>]
+node tools/validate-profile-row.mjs [--profile web] [--id experience-loop] [--file <candidate-patch>]
+node tools/profile-row.mjs show|disable|enable|remove [--file <patch>] [--id experience-loop]
+node tools/status.mjs [--limit <n>] [--session <id>]
 ```
 
-**If a `dsh` restart fails, read [`../docs/DSH-restart-recovery.zh.md`](../docs/DSH-restart-recovery.zh.md)** —
-a recovery runbook (rollback ladder, log capture, an evidence-report template, and the
-failure-mode table) written so another agent can take over.
+- The single-process runner avoids child-process pipe restrictions in confined
+  environments. Read the reported test summary rather than assuming a fixed count.
+- Retrieval diagnostics run the real pipeline without a harness or model.
+- Session-log readers handle concatenated zstd frames. Keyword hits in user or
+  tool text do not establish prompt or tool registration.
+- Profile validation uses installed harness parsers without booting a server;
+  their availability and API compatibility depend on the local install.
+  `dsh --dump-config` may write profile files and is not a read-only substitute.
+- Status output combines store counters and historical logs. Its activation
+  comparison can be inconclusive and does not replace a current-session probe.
+- Diagnostic output can contain private data. Keep it local and sanitize excerpts.
 
-- `tools/run-tests.mjs` exists because `node --test test/` spawns a child per file
-  with piped stdio, which a confined sandbox denies (`spawn EPERM`).
-- `tools/check-retrieval.mjs` answers "why didn't it inject anything?" by running
-  the real pipeline against a real store and printing every record's overlap,
-  relevance and score, which floor dropped it, and the exact block that would be
-  injected. It needs no harness and no model.
-- `tools/read-session-log.mjs` decodes the zstd-framed session log. It locates
-  each frame by its magic number, because a single decompression pass over the
-  file silently returns only the session header.
-- `tools/validate-profile-row.mjs` validates a patch row with the **harness's own**
-  parser (`loadProfileDirectory` + `composeEntries`) without booting anything. It
-  is the sandbox-safe equivalent of `dsh --dump-config`, which fails with EPERM
-  because it rewrites `cordis.yml` inside the profile directory. It reports the
-  effective row, whether an absolute `insert[].name` was anchored to a `file://`
-  URL, and whether that target exists.
-- `--from-session` replays a **real** recorded turn through `planInjection`, which
-  is how the ask-extraction rules get tested against genuine message sources
-  (`user` vs a subagent's relayed `agent-message`) without booting dsh.
-- `tools/status.mjs` answers "is the plugin loaded and working in the RUNNING dsh?"
-  in one command: store counters, per-session prompt-section / tool presence, every
-  injected block, and an **activation check** that recomputes both the old and the
-  new relevance formula for the most recent injection. If no record could only have
-  been selected by the fixed code it reports *inconclusive*, rather than pretending.
+For restart failures, see the [Chinese recovery runbook](../docs/DSH-restart-recovery.zh.md).
 
-### Test coverage
+Tests cover the real plugin entry point with a fake host, ranking and repeat
+metrics, review/merge/conflict lifecycle, storage round trips and provenance,
+recognized redaction patterns, structured short replies, observed outcomes and
+host-compatible tool schema shapes. Passing these tests is not a live-host
+compatibility or universal secret-detection guarantee.
 
-| File | Covers |
-|---|---|
-| `test/loop.test.mjs` | Scenarios **A–F** through the real plugin entry point: first solve → distil; second time → bounded, idempotent retrieval; stale skill → refine in place; wrong environment → never offered; secrets → never stored; wrong experience → list / show / pin / verify / deprecate / export / import / delete |
-| `test/review.test.mjs` | create, dedupe-merge, conflict, supersede, outcome lifecycle, credential rejection, evidence linking |
-| `test/rank.test.mjs` | environment gate, scoring order, **long-request relevance regression**, reliability smoothing, similarity, repeat metric |
-| `test/redact.test.mjs` | every credential rule, and the "useful lesson mentioning a credential survives" case |
-| `test/store.test.mjs` | round trip, scope separation, forget-project, journal append-only, hand-edited files, malformed files, audit + digest |
-| `test/slate.test.mjs` | terse replies: positional forms (number, letter, ordinal in en/zh/ja/ko), decorated labels, unique fragments, and failing closed on ambiguity |
-| `test/outcome.test.mjs` | observed outcomes: an observed skill use promoting a record and making it loadable; a failed turn counting against it; `aborted`/`interrupted`/`max-tokens` scoring nothing; a failed skill load being reported rather than credited; the `/skill-name` gesture; surfacing never scoring; single-settle; disable switch; the injected block making no false loadability claim |
-| `test/schema.test.mjs` | tool schemas stay inside the host-supported JSON Schema subset the registry asserts |
+## Host integration and limitations
 
----
+Hooks: `agent/session-start`, prepended `agent/pre-step`,
+`user-questions/request`, `session/event`, `session/flush`, and unload cleanup via
+`ctx.effect`. The plugin registers two tools, one command, a system-prompt section,
+a skill provider and the `experienceLoop` service.
 
-## Hooks used
-
-| Hook | Purpose |
-|---|---|
-| `agent/session-start` | Learn the project context; register per-session cleanup |
-| `agent/pre-step` (`{prepend:true}` waterfall) | Retrieval. Prepended so `next()` yields the final claimed batch from every other contributor; appends exactly one `recall`-form plugin message |
-| `user-questions/request` (waterfall) | Observe a question the agent posed — its option labels and the answer — then delegate with `next()`. Pure observation: never claims, answers, or delays a question. This is what gives a one-letter reply an exact referent |
-| `session/event` | Deterministic evidence capture into `episodes.jsonl`, and observed outcome attribution (skill loads, turn-end reason) |
-| `session/flush` | Durability |
-| `ctx.effect` | Flush on unload; dispose the skill provider |
-
-Registrations: `ctx.tools.register` ×2, `ctx.commands.register` ×1,
-`ctx.systemPrompt.section` at order 3000 (after first-party tool guidance,
-before the tools SDK), `ctx.skills.registerProvider` ×1, `ctx.provide('experienceLoop')`.
-
----
-
-## Known limitations
-
-- **The write path is model-driven.** If the model never calls
-  `experience_review`, nothing is distilled; the episode journal still records
-  the evidence and `/experience pending` shows it. There is no background
-  consolidator (deliberately: no LLM calls inside the plugin, no recursion).
-- **The catalog is paid for on every request.** Listing every candidate is what
-  makes promotion reachable, but it is not free: the shorter candidate tier is
-  the only thing keeping it affordable, and with a few hundred learned skills it
-  would stop being affordable at all. `maxExposedSkills` (default 40) is the
-  hard cap, and verified skills are never the ones dropped when it bites.
-- **Promotion still needs something to exercise the skill.** Observed outcomes
-  can promote a candidate, but only after it has actually been loaded; nothing
-  promotes a skill purely for existing. `/experience verify <id>` is the direct
-  human override.
-- **Duplicate skills accumulate.** The catalog makes this visible for the first
-  time — this repo's store holds five separately-distilled skills about
-  establishing GitHub repo maintenance, which the `MERGE_SIMILARITY` (0.72)
-  dedupe did not merge because their titles and summaries differ. Exposure
-  surfaces the redundancy; it does not fix it.
-- **Keyword scoring, not embeddings.** Accurate for the vocabulary-overlap case
-  this system targets, and free; it will miss a relevant record that shares no
-  vocabulary with the request. Relevance is a *saturating function of the
-  overlap count* plus Jaccard precision — deliberately not query coverage, which
-  would score a long, detailed task prompt lower than a one-line one (a bug
-  caught in live testing).
-- **A conflict is surfaced, not resolved.** Resolution is a human decision or an
-  explicit `supersedes`.
-- **No cross-machine sync.** Data is local files; use `/experience export` +
-  `import` to move it.
-- **Subagent retrieval is off by default**, so a delegated agent does not reuse
-  what the parent learned unless `inject.subagents` is enabled.
-- **Editing the plugin's `.mjs` requires a dsh restart** (module reload is a
-  separate opt-in in this harness).
-- **`metric` needs real repetition.** It reports honestly that it has nothing to
-  compare until a task signature has occurred twice.
+- Distillation needs `experience_review`; there is no background LLM consolidator.
+- Keyword retrieval can miss relevant lessons with different wording.
+- Deduplication can miss paraphrases; conflicts still need explicit resolution.
+- Catalog and injection budgets limit visibility and context cost.
+- Subagent retrieval is off by default.
+- Local storage has no built-in cross-machine sync; review exports before moving them.
+- Host APIs, profile layout and module reload behavior are version-dependent.

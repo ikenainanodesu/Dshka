@@ -178,10 +178,8 @@ function passthrough(raw) {
  * shape grows over time (`observedOutcomes`, `surfacedCount`, `lastOutcome`),
  * and `flush()` rewrites a scope from these in-memory objects — so a loader
  * that enumerates only the fields it has heard of does not merely hide the
- * others, it DELETES them on the next write. That is exactly what happened:
- * the aggregate counters in `state.json` reported 142 record surfaces while
- * only 6 records still carried a `surfacedCount`, because every record the
- * loader had not been taught about was quietly emptied of its provenance.
+ * others, it DELETES them on the next write. Preserve unknown fields so
+ * per-record provenance survives a load-modify-flush cycle.
  *
  * `makeRecord` deliberately does NOT do this: that path builds a record from a
  * MODEL-supplied entry, where unknown keys are the model's business and the

@@ -61,14 +61,9 @@ const MERGED_REF = {
 }
 
 /**
- * A supersede names the record that replaced the old one, so its shape is
- * `{id, by}` — not a plain record reference. Declaring it as one made the tool
- * emit a value its own schema rejected, and the host refused to surface the
- * result ("returned invalid output") even though the write had already
- * succeeded. Caught by live testing; the schema now matches the runtime value.
- *
- * `scope` is part of the value because the renderer prints it: without it a
- * supersede line read `[failure/undefined]` — also caught by live testing.
+ * Supersede output names the replacement via `by`, unlike a plain record
+ * reference. Keep the schema aligned with the returned value: a rejected
+ * response can follow an already-persisted write. Include `scope` for rendering.
  */
 const SUPERSEDED_REF = {
   type: 'object',

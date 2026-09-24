@@ -91,8 +91,7 @@ export function reliability(record) {
  * Plain query coverage (`|query ∩ record| / |query|`) is the obvious relevance
  * measure and it is WRONG for this system: a detailed multi-paragraph task
  * prompt has a large token set, so a record that matches several of its
- * meaningful tokens still scores a tiny fraction and is filtered out. That bug
- * was caught live — a subagent given a long instruction received nothing.
+ * meaningful tokens can still score a tiny fraction and be filtered out.
  *
  * Relevance therefore mixes a SATURATING function of the raw overlap count
  * (1 hit → 0.25, 3 → 0.5, 8 → 0.73) with Jaccard precision, so it is stable
@@ -353,9 +352,8 @@ const MIN_TASK_TOKENS = 3
  *
  * Compared against the whole set rather than a truncated signature, because a
  * signature built from a handful of alphabetically-first tokens is dominated by
- * shared boilerplate: two completely different subagent prompts that both began
- * "你在 Windows 仓库 C:\work\example-project 里工作…" were reported as
- * one repeated task that "got worse".
+ * shared boilerplate. Different subagent tasks can share the same workspace
+ * preamble without being comparable repetitions.
  */
 const TASK_CLUSTER_SIMILARITY = 0.5
 
@@ -372,8 +370,9 @@ export function taskSignature(episode, size = 6) {
 }
 
 /**
- * The plugin's headline claim, measured rather than asserted: for repeats of
- * the same task, how does the first run compare with the runs that followed?
+ * Compare first-run and later tool-call counts for vocabulary-matched tasks.
+ * This descriptive metric does not prove equal difficulty, outcome quality,
+ * or a causal improvement from experience reuse.
  *
  * Grouping is deliberately conservative, because a KPI that invents repeats is
  * worse than no KPI:

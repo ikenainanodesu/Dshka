@@ -17,9 +17,8 @@
  *      evidence, never an Experience, and it is never injected verbatim.
  *
  *   3. The write path. `experience_review` (model) and `/experience` (human)
- *      both go through `applyReview`, which is the only code that creates,
- *      merges, supersedes, deprecates or deletes a record — and the only code
- *      that can move a record between candidate and verified.
+ *      provide record creation and lifecycle controls. Observed outcomes
+ *      additionally update confidence and status using session-event signals.
  *
  * Skills reuse the harness's own skill system: learned skills are exposed
  * through `ctx.skills` as a runtime provider, so discovery, cataloguing,
@@ -140,10 +139,9 @@ class ExperienceRuntime {
     this.posedQuestions = new Map()
     this.skillBridge = { invalidate() {}, dispose() {} }
     /**
-     * Observed outcome attribution. The model-reported `outcomes` field of a
-     * review is rare in practice (3 of 25 reviews in a measured session), so
-     * this credits the plugin's own observations — a skill actually loaded and
-     * how the turn that loaded it ended — through the same promotion gate.
+     * Attribute loaded skills using the turn-end signal independently of
+     * explicit review outcomes. This shares the promotion gate, but is a heuristic:
+     * turn completion or error does not establish a skill's causal efficacy.
      */
     this.outcomes = new OutcomeLedger({
       config,

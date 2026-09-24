@@ -80,8 +80,8 @@ test('relevance ranks a matching record above an unrelated one', () => {
   assert.equal(hits[0].record.title, 'Docker service recovery')
   assert.ok(hits[0].relevance > hits[1].relevance)
 
-  // With the production floors (>= 2 shared tokens, relevance >= 0.18) the
-  // unrelated record is dropped entirely.
+  // With the default overlap and relevance floors, the unrelated record is
+  // dropped entirely.
   const floored = rankRecords([irrelevant, relevant], query('docker container keeps restarting'), { minScore: 0 })
   assert.deepEqual(
     floored.map((hit) => hit.record.title),
@@ -100,9 +100,8 @@ test('suppressed recall: the same query never returns a deprecated record', () =
 })
 
 test('a long, detailed request still retrieves a matching record', () => {
-  // Regression: relevance was once plain query coverage, so a multi-paragraph
-  // task prompt (large token set) pushed every record below the floor. That was
-  // caught live — a subagent given a long instruction received nothing.
+  // Query coverage penalizes long prompts with large token sets; meaningful
+  // overlap must still retrieve a matching record.
   const record = keywordRecord({
     type: 'skill',
     title: 'Load and verify a local DSH plugin without publishing',
@@ -175,10 +174,8 @@ test('the repeat metric compares first runs with later runs of the same signatur
 })
 
 test('the repeat metric refuses to compare turns that cannot be identified as one task', () => {
-  // Every rule here was forced by real data: the first version of this metric
-  // reported three "repeated tasks", of which one was six unrelated turns (five
-  // with an EMPTY ask plus a stray "C") and one was two different subagent tasks
-  // that merely shared a mandated boilerplate preamble.
+  // Empty asks, unresolved short replies and shared boilerplate must not group
+  // unrelated turns into a misleading first-run/later-run comparison.
   const at = (day) => `2026-01-${String(day).padStart(2, '0')}T00:00:00Z`
   const ask = 'fix the docker health check failure now'
 

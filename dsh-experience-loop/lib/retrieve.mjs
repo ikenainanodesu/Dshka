@@ -19,8 +19,8 @@ import { PLUGIN_NAME } from './config.mjs'
  * `user` is a human prompt. `agent-message` (`form: 'relay'`) is how a
  * SUBAGENT receives its assignment: `dsh-subagent` relays the parent's task
  * with `createAgentMessage()`, whose source is `{kind: 'agent-message',
- * form: 'relay'}` — NOT `kind: 'user'`. Accepting only `user` silently disabled
- * retrieval for every delegated session, which was caught in live testing.
+ * form: 'relay'}` — NOT `kind: 'user'`. Accept both kinds so delegated tasks
+ * remain eligible when subagent retrieval is enabled.
  */
 const ASK_SOURCES = new Set(['user', 'agent-message'])
 

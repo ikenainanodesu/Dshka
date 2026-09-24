@@ -168,11 +168,8 @@ test('a hand-edited document is read back without dropping unknown fields', () =
 })
 
 test('per-record observation provenance survives a load-modify-flush cycle', () => {
-  // Regression for a real, measured data loss. `reviveRecord` rebuilt records
-  // from a fixed field list, so fields it had not been taught about were dropped
-  // in memory and then ERASED from disk by the next flush of that scope. Live
-  // damage: state.json reported 142 record surfaces while only 6 records still
-  // carried a `surfacedCount`, and `observedOutcomes` survived on 2.
+  // A fixed-field loader can drop newer provenance fields in memory and then
+  // erase them on the next flush. Verify that observation fields survive.
   const root = makeTempStoreRoot('store')
   try {
     const first = build(root)

@@ -7,16 +7,11 @@
  * the normal `skill` tool — with the harness's own discovery, invalidation and
  * token accounting.
  *
- * Two deliberate cost controls, both about the fact that a catalog entry is paid
- * for on EVERY request:
- *   - every non-deprecated record is listed, but an UNVERIFIED one gets a
- *     shortened description plus an explicit `[candidate]` marker. Hiding it
- *     instead would cost more than the tokens it saves: a learned skill the
- *     model cannot see is one it will never load, never exercise, and therefore
- *     never earn the evidence that would promote it. That is a deadlock, not a
- *     policy, and it was measured in production before this was changed.
- *   - descriptions are trimmed (`skillDescriptionChars` / `candidateDescriptionChars`),
- *     because the catalog's cost is (skills × description length) on EVERY request.
+ * Catalog entries cost context on every request. Under the default `all`
+ * policy, non-deprecated skills are eligible, subject to `maxExposedSkills`.
+ * Verified skills sort first; candidates get a shorter description and an
+ * explicit `[candidate - unproven]` marker. This enables discovery without
+ * treating candidate visibility as proof of correctness.
  */
 
 import { skillBodyMarkdown, skillDescription } from './render.mjs'

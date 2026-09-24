@@ -54,6 +54,10 @@ package-lock.json.bak
 .tmp-test/
 .tmp/
 .tmp-*/
+.scratch/
+.scratch-*/
+.audit-*.mjs
+.openviking/
 tmp/
 *.tmp
 .dsh/

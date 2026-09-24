@@ -187,9 +187,7 @@ export function renderRetrievalBlock(hits, notes, budgetChars, options = {}) {
   const skills = hits.filter((hit) => hit.record.type === 'skill' && hit.record.skillName)
   // Only claim a skill is loadable when it actually is. `dsh-tool-skill`
   // resolves names through the provider's catalog, so a record kept out of that
-  // catalog cannot be loaded by the model no matter what this block says — and
-  // a measured session had this line advertising five learned skills that a
-  // `skill` call would have refused.
+  // catalog cannot be loaded by the model no matter what this block says.
   const loadable = typeof canLoad === 'function' ? skills.filter((hit) => canLoad(hit.record)) : []
   const inline = skills.filter((hit) => !loadable.includes(hit))
   if (body.length > 0 && loadable.length > 0) {
