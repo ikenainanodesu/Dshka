@@ -2,7 +2,7 @@
 
 **English** | [简体中文](README.zh.md)
 
-<img src="assets/logo/logo-readme-400.png" alt="dsh-add: chibi DeepSeek whale-chan picking one plugin cartridge out of several identical ones" width="300">
+<img src="assets/logo/logo-readme-v4-400.png" alt="dsh-add: chibi DeepSeek whale-chan holding one plugin cartridge" width="300">
 
 Install a [DeepSeek Harness](https://deepseek-harness.github.io/deepseek-harness/develop/basic/) plugin **by name**.
 
@@ -110,26 +110,29 @@ Tests and online verification are different claims: the first four rows are real
 
 ## Logo and assets
 
-**The project logo is the `logo-readme.png` set** — low-saturation watercolour, faded to transparent at the edges, which is what the top of this README shows:
+**The project logo is the `logo-readme-v4*.png` set** — low-saturation watercolour, white background keyed to transparent, edges faded. It is what the top of this README shows:
 
 | File | Note |
 |---|---|
-| `logo-readme.png` | master, 960×1528 |
-| `logo-readme-800/400/200.png` | scaled; 400 is the width the README uses |
-| `logo-readme-square-512/128.png` | square builds on transparency, for avatars and package listings |
+| `logo-readme-v4.png` | master, 1024×1536 |
+| `logo-readme-v4-800/400/200.png` | scaled; 400 is the width the README uses |
+| `logo-readme-v4-square-512/128.png` | square builds on transparency, for avatars and package listings |
 
-The edge fade exists so one file works on both GitHub themes. The paper is keyed out — only the paper-coloured region **connected to the canvas edge**, so watercolour spatter and washes survive — and then alpha ramps down across the outer 9%, so the artwork dissolves into the page instead of sitting in a rectangle. Measured: 52.2% fully transparent, 4.9% partial, 42.9% opaque, no hard edge on either theme.
+The edge fade exists so one file works on both GitHub themes: the flat white is keyed out, then alpha ramps down across the outer 9% so the artwork dissolves into the page. Measured: 59.5% fully transparent, 3.9% partial, 36.7% opaque, no hard edge on either theme.
 
-**That fade must not be built with a distance transform.** The artwork has light regions inside it (apron, skin) that read as paper, so a distance transform measures distance to those interior holes and drags the figure toward translucent — measured at 26.2% partial. A coordinate ramp brought it to 4.9%.
+**Why the artwork was redrawn.** The previous version was painted on textured watercolour paper, and that paper's *shaded* form (between the legs, `rgb(235,233,232)`) cannot be told apart by colour from the character's *highlight* whites (apron, `rgb(245,241,238)`): both have chroma `R−B +6`, against skin at `+16`. Clearing it by geometry-plus-colour-plus-area instead **damaged the character** — holes through the face, apron, arms and socks. So this version is painted on a uniform flat white sheet (corners at 254, std 0.54), which keys out cleanly in one pass, and the leftover paper between the legs and inside the hair is gone.
+
+**The fade must not be built with a distance transform.** Light regions inside the figure read as paper, so a distance transform measures distance to those interior holes and drags the figure toward translucent — measured at 26.2% partial; a coordinate ramp gives 4.9%, and 3.9% here.
 
 ### Other versions (kept as alternatives)
 
-- **`logo-watercolor-desat70.png`** — the source of the project logo (watercolour, one stop desaturated), with its paper background.
-- `logo-watercolor.png` — the watercolour render, full saturation.
-- `logo-nobg*.png` — transparent builds of the earlier cel-shaded version; the two blurred cartridges **are still in them** because they are welded to the figure and cannot be separated.
+- **`logo-watercolor-desat70.png`** — the previous watercolour (with its paper background), composition includes the background cartridges.
+- `dsh-add-watercolor-*.png` — raw watercolour render output.
+- `dsh-add-wc-white-*.png` — the raw render this logo came from (flat white background).
+- `logo-nobg*.png` — transparent builds of the earlier cel-shaded version; the two blurred cartridges are welded to the figure and cannot be separated.
 - `logo.png` — the original cel-shaded master.
 
-Scripts: `contract-watercolor.txt` (generation contract), `remove_bg.py` (keying), `fade_edges.py` (edge fade), `headcount_proof.py` (head-count measurement), `finalize_logo.py` (downscaling).
+Scripts: `contract-watercolor-white.txt` (this version's contract), `contract-watercolor.txt` (previous), `fade_edges.py` (keying + edge fade), `clear_inner_paper.py` (the failed enclosed-paper attempt, kept as a record), `remove_bg.py`, `headcount_proof.py`, `finalize_logo.py`.
 
 - Generated through the OpenAI Codex subscription (this project's hard rule: Codex only for image generation; local models take no part).
 - The character is the community fan interpretation "DeepSeek whale-chan", with identity anchors taken from the local `PERSONA.md`. **The character design and artwork belong to their original authors** (CC-BY-NC-SA 4.0): personal use is fine, **commercial use needs separate permission**.

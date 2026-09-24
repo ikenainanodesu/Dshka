@@ -2,7 +2,7 @@
 
 [English](README.md) | **简体中文**
 
-<img src="assets/logo/logo-readme-400.png" alt="dsh-add：Q 版 DeepSeek 鲸鱼娘从几只一模一样的插件方块里选中一个" width="300">
+<img src="assets/logo/logo-readme-v4-400.png" alt="dsh-add：Q 版 DeepSeek 鲸鱼娘捧着一个插件方块" width="300">
 
 按**名字**安装 [DeepSeek Harness](https://deepseek-harness.github.io/deepseek-harness/develop/basic/) 插件。
 
@@ -113,28 +113,29 @@ dsh-add --spec ./my-plugin            # 本地开发中的插件，按路径装
 
 ## Logo 与素材
 
-**项目 logo 是 `logo-readme.png` 系列**（低饱和水彩、四周透明渐隐，README 顶部用的就是它）：
+**项目 logo 是 `logo-readme-v4*.png`**（低饱和水彩、白底已抠成透明、四周渐隐，README 顶部用的就是它）：
 
 | 文件 | 说明 |
 |---|---|
-| `logo-readme.png` | 主图 960×1528 |
-| `logo-readme-800/400/200.png` | 等比缩放，400 是 README 实际使用的宽度 |
-| `logo-readme-square-512/128.png` | 方形版（透明底居中），用于头像/包页 |
+| `logo-readme-v4.png` | 主图 1024×1536 |
+| `logo-readme-v4-800/400/200.png` | 等比缩放，400 是 README 实际使用的宽度 |
+| `logo-readme-v4-square-512/128.png` | 方形版（透明底居中），用于头像/包页 |
 
-四周渐隐是为了同时适配 GitHub 的浅色与深色主题：纸底被抠成透明（只抠**与画布边缘连通**的纸色区域，水彩飞溅与晕染都保留），再在四周 9% 的范围做 alpha 渐隐，让画面化进页面背景而不是贴一个矩形。实测：全透明 52.2%、部分透明 4.9%、不透明 42.9%，两种主题下均无硬边。
+四周渐隐是为了同时适配 GitHub 的浅色与深色主题：白底抠成透明后，再在四周 9% 的范围做 alpha 渐隐，让画面化进页面背景。实测：全透明 59.5%、部分透明 3.9%、不透明 36.7%，两种主题下均无硬边。
 
-**四周渐隐不能用距离变换实现**：画面内部的浅色区域（围裙、肤色）会被误判成纸，距离场于是测的是"到这些内部洞的距离"，把人物大片压成半透明（实测部分透明高达 26.2%）。改用坐标渐隐后降到 4.9%。
+**为什么又重画了一版**：上一版画在有纹理的水彩纸上，纸底的**冷灰阴影**（如腿间 `rgb(235,233,232)`）与人物身上的**暖白高光**（围裙 `rgb(245,241,238)`）颜色上无法区分——两者的色度都是 `R−B +6`，肤色 `+16`，实测确认颜色判据分不开。用「几何+颜色距离+面积」三重判据强行清除的结果是**误伤人物**：脸上、围裙、手臂、袜子上被抠出大量黑洞。所以改为让模型直接画在**纯白平涂**背景上（四角均值 254、std 0.54），白底一次抠净，腿间与发丝间不再有残留。
+
+**四周渐隐不能用距离变换**：画面内部的浅色区域会被误判成纸，距离场于是测的是"到这些内部洞的距离"，把人物大片压成半透明（实测部分透明 26.2%，改用坐标渐隐后 4.9%→本版 3.9%）。
 
 ### 其它版本（保留备选）
 
-`assets/logo/` 下还有生成过程中的几版，均可作为备选：
-
-- **`logo-watercolor-desat70.png`**：本项目 logo 的来源图（水彩 + 降一档饱和），带纸底。
-- `logo-watercolor.png`：水彩原图，未降饱和。
-- `logo-nobg*.png`：旧版（赛璐璐风）的透明背景版，**背景里那两只虚化方块仍在**——它们与人物焊死，无法分离。
+- **`logo-watercolor-desat70.png`**：上一版水彩（带纸底），构图含背景方块。
+- `dsh-add-watercolor-*.png`：水彩随机版原始输出。
+- `dsh-add-wc-white-*.png`：本版 logo 的原始输出（纯白背景）。
+- `logo-nobg*.png`：更早的赛璐璐风透明版，背景里那两只虚化方块与人物焊死、无法分离。
 - `logo.png`：最初的赛璐璐风主图。
 
-生成与处理脚本：`contract-watercolor.txt`（水彩版约束）、`remove_bg.py`（去背）、`fade_edges.py`（四周渐隐）、`headcount_proof.py`（头身比标定）、`finalize_logo.py`（缩放）。
+生成与处理脚本：`contract-watercolor-white.txt`（本版生成约束）、`contract-watercolor.txt`（上一版约束）、`fade_edges.py`（抠底+四周渐隐）、`clear_inner_paper.py`（封闭纸底的失败尝试，保留作记录）、`remove_bg.py`、`headcount_proof.py`、`finalize_logo.py`。
 
 - 生成走 OpenAI Codex 订阅（本项目硬规则：出图只用 Codex，本地模型不参与出图）。
 - 角色为社区二创形象「DeepSeek 鲸鱼娘」，身份锚点取自本地 `PERSONA.md`；**角色设计与立绘版权属原作者**（CC-BY-NC-SA 4.0），自用可以，**商用需另行授权**。

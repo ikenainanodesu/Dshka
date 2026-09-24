@@ -1,0 +1,21 @@
+WATERCOLOUR LOGO on a CLEAN FLAT WHITE SHEET. This is a re-render of an earlier version whose textured paper background could not be removed cleanly, so the background requirement below is as important as the artwork.
+
+BACKGROUND - the whole point of this render:
+- The background is ONE UNIFORM FLAT PURE WHITE, rgb(255,255,255), edge to edge. Absolutely no paper texture, no tooth, no fibre grain, no gradient, no off-white or cream tint, no vignette and no visible sheet edge or rectangle.
+- The white must be clean enough to be keyed out as transparent afterwards. Any mottling, shading, warm tint or watercolour bloom in the background makes that impossible, so keep it perfectly blank.
+- At least 8% clear margin on all four sides: nothing the character wears, holds, or sheds may come within that margin.
+- Only the character and the single cartridge she holds are painted. NO background blocks, NO floating cartridges, NO duplicate objects, NO stars, NO sparkles, NO confetti and NO paint spatter anywhere outside her own silhouette.
+
+ARTWORK - watercolour technique, applied only to the character:
+- Pigment granulation, wet-on-wet bleeding and soft feathered edges inside the figure; where two of her own colours meet they bloom into each other.
+- Colour is transparent and luminous, with her whites reading as pale washes rather than opaque paint.
+- Loose dry-brush strokes on hair and skirt, visible brush texture, thin broken linework rather than a hard continuous outline. Any spatter stays inside her silhouette.
+- Low saturation, as requested: muted dusty navy and dusty blue hair with soft pale-cyan tips, off-white and pale grey frills and apron, a single restrained antique-gold accent. No neon, no high chroma, no glossy highlights, no strong contrast.
+
+CHARACTER - DeepSeek whale-chan, unchanged: deep-sea navy blue long hair grading to curly cyan tips, a wide round face with large deep-blue eyes, small nose, fixed blush, a pair of side whale-fin ears, a single forward-curving ahoge, a naturally attached whale tail, and her navy-and-white maid dress with a navy neck ribbon holding a sapphire, a white frilled headdress, a white frilled apron and collar, dark-gold piping, and white socks.
+
+PROPORTION - chibi / Q-version, about 3.5 heads tall, big head and small body. Never a tall realistic figure.
+
+COMPOSITION - front view, whole body inside the frame, standing, centred, both hands holding ONE rounded-square plugin cartridge in front of her: a small navy face with a thin dark-gold border, two or three little gold contact pins along one edge, and a tiny white whale-tail glyph on its face.
+
+EXCLUSIONS: not 3D render, not photograph, not digital airbrush, not cel-shaded, not flat vector fill, not realistic proportions, no tall adult figure, no extra limbs, no second character, no background objects, no text, no letters, no numbers, no signature, no watermark, no logo lockup.
