@@ -2,7 +2,7 @@
 
 **English** | [简体中文](README.zh.md)
 
-<img src="assets/logo/logo.png" alt="dsh-add: chibi DeepSeek whale-chan picking one plugin cartridge out of several identical ones" width="320">
+<img src="assets/logo/logo-readme-400.png" alt="dsh-add: chibi DeepSeek whale-chan picking one plugin cartridge out of several identical ones" width="300">
 
 Install a [DeepSeek Harness](https://deepseek-harness.github.io/deepseek-harness/develop/basic/) plugin **by name**.
 
@@ -110,47 +110,31 @@ Tests and online verification are different claims: the first four rows are real
 
 ## Logo and assets
 
-`assets/logo/` holds the Q-version (chibi) mark: `logo.png` (512px, canonical) plus `logo-512/256/128.png`.
+**The project logo is the `logo-readme.png` set** — low-saturation watercolour, faded to transparent at the edges, which is what the top of this README shows:
+
+| File | Note |
+|---|---|
+| `logo-readme.png` | master, 960×1528 |
+| `logo-readme-800/400/200.png` | scaled; 400 is the width the README uses |
+| `logo-readme-square-512/128.png` | square builds on transparency, for avatars and package listings |
+
+The edge fade exists so one file works on both GitHub themes. The paper is keyed out — only the paper-coloured region **connected to the canvas edge**, so watercolour spatter and washes survive — and then alpha ramps down across the outer 9%, so the artwork dissolves into the page instead of sitting in a rectangle. Measured: 52.2% fully transparent, 4.9% partial, 42.9% opaque, no hard edge on either theme.
+
+**That fade must not be built with a distance transform.** The artwork has light regions inside it (apron, skin) that read as paper, so a distance transform measures distance to those interior holes and drags the figure toward translucent — measured at 26.2% partial. A coordinate ramp brought it to 4.9%.
+
+### Other versions (kept as alternatives)
+
+- **`logo-watercolor-desat70.png`** — the source of the project logo (watercolour, one stop desaturated), with its paper background.
+- `logo-watercolor.png` — the watercolour render, full saturation.
+- `logo-nobg*.png` — transparent builds of the earlier cel-shaded version; the two blurred cartridges **are still in them** because they are welded to the figure and cannot be separated.
+- `logo.png` — the original cel-shaded master.
+
+Scripts: `contract-watercolor.txt` (generation contract), `remove_bg.py` (keying), `fade_edges.py` (edge fade), `headcount_proof.py` (head-count measurement), `finalize_logo.py` (downscaling).
 
 - Generated through the OpenAI Codex subscription (this project's hard rule: Codex only for image generation; local models take no part).
 - The character is the community fan interpretation "DeepSeek whale-chan", with identity anchors taken from the local `PERSONA.md`. **The character design and artwork belong to their original authors** (CC-BY-NC-SA 4.0): personal use is fine, **commercial use needs separate permission**.
 - Head-to-body ratio measured with `headcount_proof.py`: skull-to-soles ≈ 1050 px over a ≈280 px head, i.e. **about 3.75 heads**. The bundled automatic detector reported 14.15 heads on this image, which is wrong; that reading is discarded and the number above comes from drawn calibration lines checked by eye.
-- `ref-q3.png` is the proportion-authority reference composed by `build_proportion_ref.py` (left = design authority, right = a skeleton computed for the requested head count); `contract-icon.txt` is the highest-priority constraint used for generation.
-
-### Transparent version
-
-`logo-nobg.png` (1254px) plus `logo-nobg-512/256/128.png` are the transparent-background versions, produced by `remove_bg.py`, which cuts the cream canvas and keeps what is on it.
-
-The important part: **colour keying does not work here.** The apron is `rgb(247,243,249)`, only 3 units away from the background `rgb(248,248,232)`, and the skin is nearly as close — a "distance from the background colour" threshold eats holes through the apron and the face. The background is the region *connected to the canvas edge*, so the cut is a flood fill, not a colour test. Alpha ramps only within a few pixels of the cut (histogram: 54.45% fully transparent, 2.59% partial, 42.97% opaque).
-
-The two blurred plugin cartridges **remain in the transparent version**. That is a measured result, not an oversight — they cannot be separated from the figure automatically:
-
-| Attempt | Measured result |
-|---|---|
-| Connected components | cartridges and figure share the largest component (their blurred edges meet) |
-| Saturation test | cartridges S≈23, but the apron is S≈3 and the canvas S≈22 — no separation |
-| Alpha test | the cartridges are painted low-contrast, not semi-transparent: alpha 255, same as the figure |
-| Morphological erosion, 20/30px | still a single component after eroding — the waist join is wide, not a thin bridge |
-| Row-by-row run splitting | only 385 of 770 rows on the left have a gap; on the right, 589 rows have **no** gap at all |
-
-Cutting along rows anyway would slice off hair, so it was not done. A figure-only version needs a fresh generation without the cartridges in the composition.
-
-### Watercolour version (low saturation)
-
-`logo-watercolor*.png` is the low-saturation watercolour take, in three strengths:
-
-| File | Colour kept | Note |
-|---|---|---|
-| `logo-watercolor.png` | 100% | the model's watercolour render as generated |
-| `logo-watercolor-desat70.png` | 70% | **recommended**: clearly desaturated while the watercolour's warm/cool layering and blue identity survive |
-| `logo-watercolor-desat50.png` | 50% | greyer and flatter; use with care |
-
-Each strength ships as square 512/256/128 (scaled to fit and centred on the paper, never cropped or distorted).
-
-- The regeneration contract forbade any background blocks, sparkles or particles — only the character and the one cartridge in her hands — so **this version's background is clean**, which sidesteps the "cartridges welded to the figure" problem the earlier version hit.
-- Desaturation preserves luma: `out = gray + (c − gray) × k`, not a direct cut of HSV saturation (which drags brightness down and looks muddy).
-- The bleeding, paper tooth and spatter are **painted**, not filterable: a desaturation filter only removes colour and cannot create watercolour texture, which is why this version was regenerated rather than processed.
-- The square versions carry the paper background, so **they show as a cream square on dark backgrounds**. A transparent build needs a separate keying pass, and the watercolour bleeding means keying will cost some of the effect.
+- `ref-q3.png` is the proportion-authority reference composed by `build_proportion_ref.py` (left = design authority, right = a skeleton computed for the requested head count).
 
 ## License
 
