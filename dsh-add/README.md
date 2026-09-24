@@ -2,7 +2,7 @@
 
 **English** | [简体中文](README.zh.md)
 
-<img src="assets/logo/logo-readme-v4-400.png" alt="dsh-add: chibi DeepSeek whale-chan holding one plugin cartridge" width="300">
+<img src="assets/logo/logo-readme-v5-400.png" alt="dsh-add: chibi DeepSeek whale-chan holding one plugin cartridge" width="300">
 
 Install a [DeepSeek Harness](https://deepseek-harness.github.io/deepseek-harness/develop/basic/) plugin **by name**.
 
@@ -110,19 +110,21 @@ Tests and online verification are different claims: the first four rows are real
 
 ## Logo and assets
 
-**The project logo is the `logo-readme-v4*.png` set** — low-saturation watercolour, white background keyed to transparent, edges faded. It is what the top of this README shows:
+**The project logo is the `logo-readme-v5*.png` set** — low-saturation watercolour, white background keyed to transparent, edges faded. It is what the top of this README shows:
 
 | File | Note |
 |---|---|
-| `logo-readme-v4.png` | master, 1024×1536 |
-| `logo-readme-v4-800/400/200.png` | scaled; 400 is the width the README uses |
-| `logo-readme-v4-square-512/128.png` | square builds on transparency, for avatars and package listings |
+| `logo-readme-v5.png` | master, 1024×1536 |
+| `logo-readme-v5-800/400/200.png` | scaled; 400 is the width the README uses |
+| `logo-readme-v5-square-512/128.png` | square builds on transparency, for avatars and package listings |
 
-The edge fade exists so one file works on both GitHub themes: the flat white is keyed out, then alpha ramps down across the outer 9% so the artwork dissolves into the page. Measured: 59.5% fully transparent, 3.9% partial, 36.7% opaque, no hard edge on either theme.
+The edge fade exists so one file works on both GitHub themes: the flat white is keyed out, then alpha ramps down across the outer 9% so the artwork dissolves into the page.
 
-**Why the artwork was redrawn.** The previous version was painted on textured watercolour paper, and that paper's *shaded* form (between the legs, `rgb(235,233,232)`) cannot be told apart by colour from the character's *highlight* whites (apron, `rgb(245,241,238)`): both have chroma `R−B +6`, against skin at `+16`. Clearing it by geometry-plus-colour-plus-area instead **damaged the character** — holes through the face, apron, arms and socks. So this version is painted on a uniform flat white sheet (corners at 254, std 0.54), which keys out cleanly in one pass, and the leftover paper between the legs and inside the hair is gone.
+**How the paper between the hair strands was removed** (this logo was reworked more here than anywhere else). Flooding paper in from the canvas border only reaches the outside, so paper **enclosed by the strands** stays in the image. Colour cannot separate it either: the leftovers are neutral white (`R−B` between −1 and +1) and the face is a warm white (+6..+13), but the **apron, socks and headdress lace are neutral white too** (0..+1) and collide with the leftovers exactly.
 
-**The fade must not be built with a distance transform.** Light regions inside the figure read as paper, so a distance transform measures distance to those interior holes and drags the figure toward translucent — measured at 26.2% partial; a coordinate ramp gives 4.9%, and 3.9% here.
+Three filters in series, and the order matters: (1) neutral white (`min ≥ 228` and `|R−B| ≤ 6`) — drops the warm face and the blue-tinted watercolour edges; (2) flood the *whole* neutral set from the canvas border — **this must happen before any region limit**, or the hair strands cut the outer background off from the border and the entire outside is misread as enclosed; (3) only then a region window (`y 430..760`, `x < 330` or `x > 700`, clear of the fin and collar lace) plus a size window (40..3000 px, which discards apron-sized whites). Result: 21 blobs, 9030 px cleared; strand gaps clean, apron, lace and face intact.
+
+**The fade must not be built with a distance transform.** Light regions inside the figure read as paper, so a distance transform measures distance to those interior holes and drags the figure toward translucent — 26.2% partial, against 3.9% for a coordinate ramp.
 
 ### Other versions (kept as alternatives)
 
@@ -132,7 +134,7 @@ The edge fade exists so one file works on both GitHub themes: the flat white is 
 - `logo-nobg*.png` — transparent builds of the earlier cel-shaded version; the two blurred cartridges are welded to the figure and cannot be separated.
 - `logo.png` — the original cel-shaded master.
 
-Scripts: `contract-watercolor-white.txt` (this version's contract), `contract-watercolor.txt` (previous), `fade_edges.py` (keying + edge fade), `clear_inner_paper.py` (the failed enclosed-paper attempt, kept as a record), `remove_bg.py`, `headcount_proof.py`, `finalize_logo.py`.
+Scripts: `contract-watercolor-white.txt` (this version's contract), `contract-watercolor.txt` (previous), `fade_edges.py` (keying + edge fade), `clear_hair_paper.py` (clears the enclosed paper inside the hair), `clear_inner_paper.py` (the earlier failed attempt, kept as a record), `remove_bg.py`, `headcount_proof.py`, `finalize_logo.py`.
 
 - Generated through the OpenAI Codex subscription (this project's hard rule: Codex only for image generation; local models take no part).
 - The character is the community fan interpretation "DeepSeek whale-chan", with identity anchors taken from the local `PERSONA.md`. **The character design and artwork belong to their original authors** (CC-BY-NC-SA 4.0): personal use is fine, **commercial use needs separate permission**.
