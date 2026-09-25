@@ -2,7 +2,7 @@
 
 **English** | [简体中文](README.zh.md)
 
-<img src="assets/logo/logo-readme-v6-400.png" alt="dsh-add: chibi DeepSeek whale-chan holding one plugin cartridge" width="300">
+<img src="assets/logo/logo-400.png" alt="dsh-add: chibi DeepSeek whale-chan holding one plugin cartridge" width="300">
 
 Install a [DeepSeek Harness](https://deepseek-harness.github.io/deepseek-harness/develop/basic/) plugin **by name**.
 
@@ -110,39 +110,36 @@ Tests and online verification are different claims: the first four rows are real
 
 ## Logo and assets
 
-**The project logo is the `logo-readme-v6*.png` set** — low-saturation watercolour, white background keyed to transparent, edges faded. It is what the top of this README shows:
+**The project logo is `logo.png`** — low-saturation watercolour, white background keyed to transparent, edges faded. It is what the top of this README shows:
 
 | File | Note |
 |---|---|
-| `logo-readme-v6.png` | master, 1024×1536 |
-| `logo-readme-v6-800/400/200.png` | scaled; 400 is the width the README uses |
-| `logo-readme-v6-square-512/128.png` | square builds on transparency, for avatars and package listings |
+| `logo.png` | master, 1024×1536, transparent |
+| `logo-800/400/200.png` | scaled; 400 is the width the README uses |
+| `logo-square-512/128.png` | square builds on transparency, for avatars and package listings |
 
-The edge fade exists so one file works on both GitHub themes: the flat white is keyed out, then alpha ramps down across the outer 9% so the artwork dissolves into the page.
+Keying and fading exist so one file works on both GitHub themes: the flat white is keyed out, and the cut gets sub-pixel smoothing only — no global feather, so opacity inside the hair and shoes is never dragged down.
 
-**Two traps hit while clearing the paper enclosed by the hair** (this part of the logo was reworked more than anything else):
+**This version rebuilds alpha from the original render; it does not tune the old mask further.** Two systematic errors in the earlier pipeline are fixed:
 
-1. **Flood fill must happen before the region limit.** Restricting to "the sides of the head" first let the strands cut the outer background off from the canvas border, so the whole outside was classified as enclosed — 90k and 116k px of bogus candidates that were simply the background.
-2. **Do not decide by position and area.** The first version did, and keyed out the **white lace at the waist**: lace white and leftover paper white are the same neutral white (min channel 253-254, `|R−B| ≤ 1`), so colour cannot separate them. The reliable test is **whether the blob is ringed by dark hair**: take a ring around each candidate and require at least 55% of its opaque pixels to be dark and blue. Measured here, genuine strand gaps score 60-91% while the lace blob that was wrongly cleared scores 4-43%.
+1. **White clothing was deleted as background.** The top of the headdress and the left side of the skirt were removed during basic keying, because white clothing and paper are the same neutral white (min channel 253-254, `|R−B| ≤ 1`) and colour cannot separate them. The diagnostic is to compare geometry against the original render: take the difference between "non-near-white figure pixels in the original" and "opaque pixels in the build". That measured about 14857 px of figure content lost, mostly the ahoge tip (3285 px) and the shoes (about 9150 px) — and it also shows why **checking only enclosed holes misses deletions that touch the outer background**.
+2. **Do not decide by position and area.** The earlier attempt cleared candidates inside a positional window by size, and took the white lace at the waist with them. The fix is **manual clothing protection polygons plus individually reviewed background components**: `repair_alpha.py` carries six protection polygons (headdress, body and skirt, both legs) and 27 background component IDs checked one by one on zoomed crops; two candidates that were really waist ribbons are explicitly excluded.
 
-Result: 5 blobs, 3657 px cleared — more conservative than the previous attempt, which cleared 9557 px and damaged the lace. One inherent loss to know about: watercolour's thin outlines sit close to paper white in every channel, so the key removes about 14857 px of them across the image, mostly at the tip of the ahoge (3285 px) and the shoes (about 9150 px).
+Verification: the protected region (424461 px) has alpha minimum **255**; all 27 annotated gap centres have alpha **0**; and RGB is byte-identical to the original render (max difference **0**), proving only alpha changed.
 
 **The fade must not be built with a distance transform.** Light regions inside the figure read as paper, so a distance transform measures distance to those interior holes and drags the figure toward translucent — 26.2% partial, against 4.0% for a coordinate ramp.
 
-### Other versions (kept as alternatives)
+### Sources and scripts
 
-- **`logo-watercolor-desat70.png`** — the previous watercolour (with its paper background), composition includes the background cartridges.
-- `dsh-add-watercolor-*.png` — raw watercolour render output.
-- `dsh-add-wc-white-*.png` — the raw render this logo came from (flat white background).
-- `logo-nobg*.png` — transparent builds of the earlier cel-shaded version; the two blurred cartridges are welded to the figure and cannot be separated.
-- `logo.png` — the original cel-shaded master.
-
-Scripts: `contract-watercolor-white.txt` (this version's contract), `contract-watercolor.txt` (previous), `fade_edges.py` (keying + edge fade), `clear_hair_paper.py` (clears the enclosed paper inside the hair), `clear_inner_paper.py` (the earlier failed attempt, kept as a record), `remove_bg.py`, `headcount_proof.py`, `finalize_logo.py`.
+- **Renders kept for provenance**: `source-watercolor-white.png` (this logo's source, flat white), `source-watercolor-paper.png` (textured paper version), `source-cel-shaded.png` and `source-icon-cel-shaded.png` (the original cel-shaded pair).
+- `contract-watercolor-white.txt` / `contract-icon.txt`: the generation contracts each render came from.
+- `repair_alpha.py`: **the script this logo was built with** — rebuilds alpha from the original render, with the protection polygons and the reviewed component list.
+- `ref-q3.png`: the Q-version proportion-authority reference composed by `build_proportion_ref.py`.
+- `headcount_proof.py`: head-count calibration. `finalize_logo.py`: scaling and size output.
 
 - Generated through the OpenAI Codex subscription (this project's hard rule: Codex only for image generation; local models take no part).
 - The character is the community fan interpretation "DeepSeek whale-chan", with identity anchors taken from the local `PERSONA.md`. **The character design and artwork belong to their original authors** (CC-BY-NC-SA 4.0): personal use is fine, **commercial use needs separate permission**.
 - Head-to-body ratio measured with `headcount_proof.py`: skull-to-soles ≈ 1050 px over a ≈280 px head, i.e. **about 3.75 heads**. The bundled automatic detector reported 14.15 heads on this image, which is wrong; that reading is discarded and the number above comes from drawn calibration lines checked by eye.
-- `ref-q3.png` is the proportion-authority reference composed by `build_proportion_ref.py` (left = design authority, right = a skeleton computed for the requested head count).
 
 ## License
 
