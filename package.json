@@ -1,0 +1,43 @@
+{
+  "name": "dsh-experience-loop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DSHKA — bounded experience retrieval and review-driven reusable lessons for DeepSeek Harness.",
+  "type": "module",
+  "main": "./dsh-experience-loop/index.mjs",
+  "exports": {
+    ".": "./dsh-experience-loop/index.mjs"
+  },
+  "files": [
+    "dsh-experience-loop/",
+    "assets/logo/*.png",
+    "assets/logo/README*.md",
+    "assets/logo/crop_logo.py",
+    "docs/",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./dsh-experience-loop/cordis.patch.yml"
+    }
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24"
+  },
+  "scripts": {
+    "test": "node dsh-experience-loop/tools/run-tests.mjs",
+    "smoke": "node dsh-experience-loop/tools/smoke.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ikenainanodesu/Dshka.git"
+  },
+  "homepage": "https://github.com/ikenainanodesu/Dshka#readme",
+  "bugs": {
+    "url": "https://github.com/ikenainanodesu/Dshka/issues"
+  },
+  "author": "tensi",
+  "license": "MIT"
+}

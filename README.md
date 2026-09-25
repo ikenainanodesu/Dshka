@@ -1,128 +1,123 @@
-# DSHKA
+<p align="center">
+  <a href="assets/logo/logo.png"><img src="assets/logo/logo-waist.png" alt="DSHKA mascot: waist-up portrait of DeepSeek whale-chan" width="420"></a>
+</p>
+<h1 align="center">DSHKA</h1>
+<p align="center"><strong>Let each task leave a lesson worth reusing.</strong></p>
+<p align="center">The <code>dsh-experience-loop</code> plugin for <a href="https://deepseek-harness.github.io/deepseek-harness/develop/basic/">DeepSeek Harness</a>.</p>
+<p align="center">
+  <strong>English</strong> · <a href="README.zh-CN.md">简体中文</a><br>
+  <a href="#what-it-does">Features</a> · <a href="#install">Install</a> · <a href="dsh-experience-loop/README.md">Configuration</a> · <a href="#development">Development</a>
+</p>
 
-**English** | [简体中文](README.zh-CN.md)
-
-A DSH workspace holding two independent tools for [DeepSeek Harness](https://deepseek-harness.github.io/deepseek-harness/develop/basic/).
-
-<img src="dsh-add/assets/logo/logo-200.png" alt="dsh-add logo: chibi DeepSeek whale-chan holding one plugin cartridge" width="150">
-
-| Tool | What it is |
-|---|---|
-| [`dsh-experience-loop/`](dsh-experience-loop/) | A local experience-loop plugin: reviewed lessons become reusable, inspectable records. |
-| [`dsh-add/`](dsh-add/) | A CLI that installs a DSH community plugin **by name**, resolving collisions before it installs. |
-
-The first two sections below describe the experience-loop plugin.
+---
 
 **Execute → validate → review → distil → reuse → revise.**
 
-The aim is to reduce repeated investigation and avoid known failures. Improved efficiency is a goal, **not a proven result**. This is retrieval and record maintenance, not model training.
+DSHKA does one thing: turn reviewed task experience into local, inspectable records and retrieve relevant lessons for later work. **DSHKA is the project name; `dsh-experience-loop` is the plugin/package name.** It is not a plugin manager and does not replace DSH's installation commands.
 
-## What it stores
+## What it does
 
-| Record | Purpose |
+| Capability | Purpose |
 |---|---|
-| **Memory** (`memory`) | Stable facts about a user, environment or project. |
-| **Skill** (`skill`) | Reusable procedures, prerequisites, checks and recovery steps. |
-| **Failure** (`failure`) | Failed approaches, causes and how to avoid repeating them. |
-| **Validation** (`validation`) | Observable evidence that a task actually worked—not merely a successful process exit. |
+| **Remember** | Keep stable facts about a user, environment or project. |
+| **Reuse skills** | Make reviewed procedures available through the host's native skill catalog. |
+| **Avoid known failures** | Record failed approaches, causes and recovery guidance. |
+| **Check real outcomes** | Preserve evidence that a task worked, beyond a successful process exit. |
 
-Records live in global or project scopes, with `candidate`, `verified` or `deprecated` status. Reviews support merging, superseding and surfacing conflicts; a separate episode journal records turn evidence without becoming a lesson automatically.
+Records are scoped globally or by project, with `candidate`, `verified` and `deprecated` lifecycle states. Reviews can merge, supersede or flag conflicting lessons. Raw turn evidence is journalled separately; it does not automatically become a lesson.
 
-## Bounded reuse
+## Install
 
-- Retrieval uses keyword relevance, environment compatibility, confidence, recency and reliability. Platform/shell mismatches are filtered when those facts are known.
-- Default injection limits: **4 records**, **1,800 characters** for the whole block, a **1-turn cooldown**, and **60 injections per session**. Subagent retrieval is off by default.
-- Retrieval first tries the request itself; if nothing matches, it can use a selected option or the preceding assistant reply as context.
-- Learned skills use the host's normal skill catalog and load bodies on demand. By default, both candidates and verified skills are eligible; deprecated skills are excluded.
-- Candidate descriptions carry **`[candidate - unproven]`**, with a default **160-character description budget including the marker**. The default catalog cap is **40 skills**, prioritizing verified records, then confidence. This is separate from the retrieval-block budget; catalog entries still cost context.
+Requires a compatible **DeepSeek Harness** installation and **Node.js `^22.19.0 || >=24`**. No runtime package dependencies.
 
-Use `exposeSkills: verified` or `none` for stricter catalog visibility. Hidden or capped-out candidates may not be reachable through the model's normal skill lookup.
+Use DSH's own plugin command:
 
-## Install in a DSH profile
+```sh
+dsh plugin --profile web add github:ikenainanodesu/Dshka
+```
 
-Requires an existing compatible DeepSeek Harness installation and **Node.js `^22.19.0 || >=24`**, as declared in the plugin's `package.json`. The plugin uses Node built-ins and has no runtime package dependencies; it does not require a dependency-install step.
+Replace `web` with your profile name. The repository root declares a DSH bundle, so there is no separate installer and no npm publication prerequisite.
 
-1. Clone the repository into `<checkout>`.
-2. Back up the profile patch at `$DSH_HOME/profiles/<profile>/cordis.patch.yml` (`DSH_HOME` defaults to `$HOME/.dsh`). Append this row, replacing the example with the **absolute path** to your checkout:
+### From a local checkout
 
-   ```yaml
-   - insert:
-       - id: experience-loop
-         name: 'C:\work\Dshka\dsh-experience-loop\index.mjs'
-         config:
-           exposeSkills: all
-           maxExposedSkills: 40
-           candidateDescriptionChars: 160
-           observeOutcomes: true
-   ```
+```sh
+git clone https://github.com/ikenainanodesu/Dshka.git
+cd Dshka
+dsh plugin --profile web add .
+```
 
-   On Unix-like systems, use an absolute path such as `/path/to/Dshka/dsh-experience-loop/index.mjs`. Do not leave `<checkout>` or other placeholders in the actual patch.
-3. Reload or restart the profile according to your host configuration. Do not assume saving plugin source reloads the running module; restart DSH to activate source changes reliably.
-4. In a new turn, check that `experience_query` and `experience_review` are available and `/experience stats` responds. After a review write, inspect the store. An error-free startup alone does not establish that the plugin is active.
+If you already use a manual `insert` row for this plugin, back up the profile patch and remove that old row when switching to the bundle install; do not load the same plugin twice. Existing absolute source paths remain valid because the implementation directory has not moved.
 
-To uninstall, remove the inserted row and reload/restart the profile. Stored data remains until you explicitly remove it.
+### Verify & uninstall
 
-## Review and inspect
+Restart the target DSH profile, then confirm that `experience_query` and `experience_review` are available and that this command responds:
 
-- **`experience_query`**: search, list and inspect records; view stats, conflicts, pending reviews, audit entries and repeat-task metrics.
-- **`experience_review`**: distil durable lessons once near task completion. Use `mergeInto` to refine existing records and `outcomes` to report evidence of success or failure. Do not store credentials, raw transcripts or guesses.
-- **`/experience`**: human controls for inspection, pinning, verification, deprecation, deletion, export and import.
+```text
+/experience stats
+```
+
+A successful package-manager exit alone is not proof that the plugin loaded. To uninstall:
+
+```sh
+dsh plugin --profile web remove dsh-experience-loop
+```
+
+Stored experience is retained. Back it up before any intentional deletion.
+
+## Use the loop
+
+- **`experience_query`** — search and inspect lessons, conflicts, pending reviews and diagnostics.
+- **`experience_review`** — distil durable lessons near task completion; refine existing records rather than repeatedly adding duplicates.
+- **`/experience`** — human controls for inspection, pinning, verification, deprecation, export and deletion.
 
 ```text
 /experience search <topic>
-/experience show <record-id>
 /experience pending
 /experience conflicts
-/experience audit
-/experience metric
 /experience help
 ```
 
-### Automatic scoring is a heuristic
+### Bounded by design
 
-With `observeOutcomes: true` (the default), the current implementation attributes the end of a turn to learned skills loaded during that turn:
+Default retrieval limits: **4 records**, **1,800 characters**, a **1-turn cooldown** and **60 injections per session**. Subagent retrieval is off by default. Learned skills use the host's catalog; candidate descriptions are marked **`[candidate - unproven]`** and bodies load on demand.
 
-| Signal | Current treatment |
-|---|---|
-| Skill loaded + turn `completed` | Success; may promote a record. |
-| Skill loaded + turn `error` | Failure; may lower confidence or deprecate a record. |
-| Turn ends `aborted`, `interrupted`, `blocked` or `max-tokens` | No success/failure score. |
-| Record merely appeared in retrieval | Surface counter only; no success/failure score. |
+[Configuration, lifecycle and diagnostics →](dsh-experience-loop/README.md)
 
-**Loading a skill and completing a turn does not prove the skill helped or that the result was correct. Infrastructure failures may be misattributed to skills.** `verified` is a lifecycle label, not a quality guarantee. Prefer task-specific checks and explicit evidence.
+## Boundaries
 
-Set **`observeOutcomes: false`** to disable automatic outcome scoring. This also disables the **surface ledger**, not just success/failure attribution; explicit review outcomes remain available.
+- This is **retrieval and record maintenance, not model training**. Reduced repeated work is a goal, not a proven result.
+- Local storage is not an encrypted vault. Retrieved records enter the host's model context; secret redaction is best effort, not a guarantee.
+- `verified` is a lifecycle label, not independent proof of correctness. Automatic outcome scoring is heuristic and can misattribute failures.
+- Lessons remain advisory: they cannot override a current user request, sandbox or approval boundary.
 
-## Test locally
-
-From the repository root:
+## Development
 
 ```sh
-cd dsh-experience-loop
-node tools/run-tests.mjs
-node tools/smoke.mjs
+# From the repository root
+npm test
+npm run smoke
 ```
 
-The test runner imports the suite in one process, avoiding per-file child-process spawning. The smoke demo exercises the real plugin entry with a **fake host**, without a model or network. Neither substitutes for checking integration in a running DSH profile. `DSH_TEST_TMP` can override the test scratch directory.
+The smoke demo uses a fake host, not a running DSH profile. No model or network calls are needed for these tests.
 
-## Privacy boundaries
+```text
+Dshka/
+├── package.json              # Installable dsh-experience-loop bundle
+├── README.md / README.zh-CN.md
+├── assets/logo/              # Existing mascot artwork, unchanged
+├── dsh-experience-loop/      # Plugin implementation; stable legacy paths
+│   ├── index.mjs             # Plugin entry
+│   ├── cordis.patch.yml      # Bundle layer
+│   ├── lib/                  # Retrieval, review and storage
+│   ├── test/                 # Tests
+│   └── tools/                # Diagnostics and smoke demo
+└── docs/                     # Operational guidance
+```
 
-- The default store is `$DSH_HOME/experience-loop`, or `$HOME/.dsh/experience-loop` when `DSH_HOME` is unset. `storeRoot` overrides it. Records, episode evidence, audit data and generated Markdown are local files—not an encrypted vault.
-- The plugin makes no model calls itself, but retrieved records and skill bodies enter the host's model context and may be sent to its configured provider.
-- Pattern-based secret redaction reduces accidental exposure; it is **not a guarantee of anonymization or complete credential removal**. Paths, project names, request text and metadata can still be sensitive. Inspect stores and exports before sharing; do not submit real secrets to redaction demos.
-- Keep stores, session logs, exports, credentials and local profile configuration outside version control. An ignore rule does not remove already-tracked files or Git history.
-- Experience is advisory data. It grants no authority, overrides no current user request, and bypasses no sandbox or approval boundary.
+The nested package manifest is retained for existing local-directory installs; both entry points load **the same plugin**, not two products. New installs should use the repository root.
 
-## Limitations
+[Restart recovery guide (中文)](docs/DSH-restart-recovery.zh.md) · [Detailed plugin guide](dsh-experience-loop/README.md)
 
-Keyword retrieval can miss paraphrases. Duplicate records and unresolved conflicts need maintenance. Distillation depends on the agent calling the review tool; there is no background model consolidator or cross-machine sync. Catalog visibility adds context cost even when a skill is not loaded.
+## License & artwork
 
-`/experience metric` compares recorded tool-call counts for comparable repeated requests. It needs sufficient repeat data and is an observational diagnostic—not a controlled benchmark, proof of causation, or evidence of improved answer quality.
-
-## Repository map
-
-- [`dsh-experience-loop/`](dsh-experience-loop/): plugin entry, source, tests and operator tools.
-- [`dsh-experience-loop/README.md`](dsh-experience-loop/README.md): detailed configuration and implementation guide.
-- [`dsh-add/`](dsh-add/): CLI that installs a DSH plugin by name.
-- [`dsh-add/README.md`](dsh-add/README.md): how name resolution, disambiguation and post-install verification work.
-- [`docs/`](docs/): operational guidance.
+Code: [MIT](LICENSE). The header portrait is cropped directly from the full-resolution master, without repainting or alpha changes. Click it to view the original; all existing variants are retained. Artwork has separate permissions and incomplete source attribution; the code license does not grant rights to it. See the [asset notes](assets/logo/README.md).

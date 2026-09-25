@@ -1,128 +1,123 @@
-# DSHKA
+<p align="center">
+  <a href="assets/logo/logo.png"><img src="assets/logo/logo-waist.png" alt="DSHKA 吉祥物：DeepSeek 鲸鱼娘腰像" width="420"></a>
+</p>
+<h1 align="center">DSHKA</h1>
+<p align="center"><strong>让每次任务，留下值得复用的经验。</strong></p>
+<p align="center">面向 <a href="https://deepseek-harness.github.io/deepseek-harness/develop/basic/">DeepSeek Harness</a> 的 <code>dsh-experience-loop</code> 经验循环插件。</p>
+<p align="center">
+  <a href="README.md">English</a> · <strong>简体中文</strong><br>
+  <a href="#功能">功能</a> · <a href="#安装">安装</a> · <a href="dsh-experience-loop/README.zh-CN.md">配置说明</a> · <a href="#开发">开发</a>
+</p>
 
-[English](README.md) | **简体中文**
-
-DSHKA 仓库包含两个面向 [DeepSeek Harness](https://deepseek-harness.github.io/deepseek-harness/develop/basic/) 的独立工具。
-
-<img src="dsh-add/assets/logo/logo-200.png" alt="dsh-add logo：Q 版 DeepSeek 鲸鱼娘捧着一个插件方块" width="150">
-
-| 工具 | 说明 |
-|---|---|
-| [`dsh-experience-loop/`](dsh-experience-loop/) | 本地经验循环插件：将经过复盘的经验沉淀为可复用、可检查的记录。 |
-| [`dsh-add/`](dsh-add/) | 按**名字**安装 DSH 社区插件的命令行工具，先解决重名再安装。 |
-
-本节之后的内容描述经验循环插件。
+---
 
 **执行 → 验证 → 复盘 → 提炼 → 复用 → 修订。**
 
-目标是减少重复排查、避免重蹈覆辙。效率提升是目标，**并非已经证明的结果**。这是检索与记录维护机制，不是模型训练。
+DSHKA 只做一件事：将任务中经过复盘的经验沉淀为本地、可检查的记录，在后续工作中检索和复用。**DSHKA 是项目名，`dsh-experience-loop` 是插件／包名。** 它不是插件管理器，也不替代 DSH 的安装命令。
 
-## 存储什么
+## 功能
 
-| 记录类型 | 用途 |
+| 能力 | 用途 |
 |---|---|
-| **Memory · 记忆**（`memory`） | 关于用户、环境或项目的稳定事实。 |
-| **Skill · 技能**（`skill`） | 可复用的操作流程、前置条件、检查及恢复步骤。 |
-| **Failure · 失败经验**（`failure`） | 失败的方法、原因，以及避免再次失败的办法。 |
-| **Validation · 验证方法**（`validation`） | 证明任务真正成功的可观察证据，而非仅凭进程正常退出。 |
+| **记住稳定事实** | 保存有关用户、环境或项目的持久信息。 |
+| **复用操作技能** | 将经过复盘的流程接入宿主原生技能目录。 |
+| **避免重复踩坑** | 记录失败的方法、原因与恢复措施。 |
+| **验证真实结果** | 保留任务确实成功的证据，而非只看退出码。 |
 
-记录分为全局或项目作用域，状态为 `candidate`（候选）、`verified`（已验证）或 `deprecated`（已弃用）。复盘支持合并、取代旧记录及标记冲突；独立的回合日志记录过程证据，不会自动变成经验。
+记录分为全局和项目作用域，生命周期为 `candidate`（候选）、`verified`（已验证）、`deprecated`（已弃用）。支持合并、取代和标记冲突。原始回合证据另行记录，不会自动变成经验。
 
-## 有边界的复用
+## 安装
 
-- 检索综合关键词相关性、环境兼容性、置信度、时效性和可靠性；已知平台或 shell 不匹配时会过滤记录。
-- 默认每次最多注入 **4 条记录**，整个注入块最多 **1,800 字符**，有 **1 回合冷却期**，每个会话最多 **60 次注入**。默认不向子代理注入。
-- 优先按当前请求检索；没有命中时，才尝试用所选选项或上一条助手回复补充上下文。
-- 学到的技能接入宿主的常规技能目录，正文按需加载。默认候选和已验证技能均可展示，已弃用技能不展示。
-- 候选描述带有 **`[candidate - unproven]`** 标记，默认 **160 字符描述预算包含该标记**。目录默认最多 **40 个技能**，先按已验证状态、再按置信度排序。目录预算与检索注入预算相互独立；目录条目本身也占用上下文。
+需要兼容的 **DeepSeek Harness** 和 **Node.js `^22.19.0 || >=24`**，插件无运行时包依赖。
 
-可用 `exposeSkills: verified` 或 `none` 收紧目录可见性。被隐藏或被数量上限排除的候选技能，可能无法通过模型的常规技能查询加载。
+直接使用 DSH 官方插件命令：
 
-## 安装到 DSH 配置档
+```sh
+dsh plugin --profile web add github:ikenainanodesu/Dshka
+```
 
-需要已安装兼容的 DeepSeek Harness，以及插件 `package.json` 声明的 **Node.js `^22.19.0 || >=24`**。插件仅使用 Node 内置模块，无运行时包依赖，不需要安装依赖。
+将 `web` 替换为你的配置档名称。仓库根目录声明了 DSH bundle，无需额外安装器，也不要求先发布到 npm。
 
-1. 将仓库克隆到 `<checkout>`。
-2. 备份 `$DSH_HOME/profiles/<profile>/cordis.patch.yml`（`DSH_HOME` 默认为 `$HOME/.dsh`），追加以下配置，并将示例替换为检出目录的**绝对路径**：
+### 从本地源码安装
 
-   ```yaml
-   - insert:
-       - id: experience-loop
-         name: 'C:\work\Dshka\dsh-experience-loop\index.mjs'
-         config:
-           exposeSkills: all
-           maxExposedSkills: 40
-           candidateDescriptionChars: 160
-           observeOutcomes: true
-   ```
+```sh
+git clone https://github.com/ikenainanodesu/Dshka.git
+cd Dshka
+dsh plugin --profile web add .
+```
 
-   类 Unix 系统可使用 `/path/to/Dshka/dsh-experience-loop/index.mjs` 这样的绝对路径。实际配置中不要保留 `<checkout>` 等占位符。
-3. 按宿主配置重新加载或重启配置档。不要假定保存插件源码就会重载运行中的模块；要可靠地启用源码变更，请重启 DSH。
-4. 在新回合中确认 `experience_query`、`experience_review` 可用，且 `/experience stats` 能响应。复盘写入后检查存储文件。启动没有报错，并不足以证明插件已生效。
+如果此前通过手工 `insert` 行加载本插件，切换到 bundle 安装时请先备份配置档 patch，再移除旧行，避免重复加载。实现目录没有移动，旧的绝对路径引用仍然有效。
 
-卸载时删除插入的配置行，再重新加载或重启配置档。已存数据不会随卸载删除，需要另行明确移除。
+### 验证与卸载
 
-## 复盘与检查
+重启目标 DSH 配置档，在新回合确认 `experience_query`、`experience_review` 可用，并检查：
 
-- **`experience_query`**：搜索、列出及查看记录；查询统计、冲突、待复盘回合、审计记录和重复任务指标。
-- **`experience_review`**：在任务接近结束时进行一次持久经验提炼。用 `mergeInto` 改进已有记录，用 `outcomes` 报告成功或失败证据。不要保存凭据、原始对话或猜测。
-- **`/experience`**：供用户检查、置顶、验证、弃用、删除、导出及导入记录的控制命令。
+```text
+/experience stats
+```
+
+包管理器正常退出不等于插件已经加载。卸载命令：
+
+```sh
+dsh plugin --profile web remove dsh-experience-loop
+```
+
+已有经验不会随卸载删除，主动清理前请先备份。
+
+## 如何使用
+
+- **`experience_query`**：检索和检查经验、冲突、待复盘回合及诊断信息。
+- **`experience_review`**：在任务接近结束时提炼持久经验；优先完善已有记录，而不是反复新增相同内容。
+- **`/experience`**：供用户检查、置顶、验证、弃用、导出和删除记录。
 
 ```text
 /experience search <topic>
-/experience show <record-id>
 /experience pending
 /experience conflicts
-/experience audit
-/experience metric
 /experience help
 ```
 
-### 自动评分只是启发式判断
+### 有边界地复用
 
-`observeOutcomes: true` 为默认设置。当前实现将回合结束状态归因到该回合加载过的经验技能：
+默认每次检索最多 **4 条记录**、整个注入块最多 **1,800 字符**，有 **1 回合冷却期**，每个会话最多 **60 次注入**。默认不向子代理注入。技能接入宿主目录，候选描述带 **`[candidate - unproven]`** 标记，正文按需加载。
 
-| 信号 | 当前处理 |
-|---|---|
-| 技能已加载，回合以 `completed` 结束 | 记为成功，可能提升记录状态。 |
-| 技能已加载，回合以 `error` 结束 | 记为失败，可能降低置信度或弃用记录。 |
-| 回合以 `aborted`、`interrupted`、`blocked` 或 `max-tokens` 结束 | 不计成功或失败。 |
-| 记录仅出现在检索注入块中 | 仅增加展示计数，不计成功或失败。 |
+[配置、生命周期与诊断说明 →](dsh-experience-loop/README.zh-CN.md)
 
-**加载技能后完成回合，不代表技能有帮助，也不代表结果正确。基础设施故障可能被错误归因到技能。** `verified` 是生命周期标签，不是质量保证。应优先依靠针对任务的检查和明确证据。
+## 使用边界
 
-如需关闭自动结果评分，设置 **`observeOutcomes: false`**。这也会关闭**展示记录账本（surface ledger）**，并非只关闭成功／失败归因；仍可通过复盘显式报告结果。
+- 这是**检索与记录维护，不是模型训练**。减少重复工作是目标，并非已证明的结果。
+- 本地存储不是加密保险库。检索内容会进入宿主模型上下文；模式脱敏只能降低风险，不能保证完整移除秘密。
+- `verified` 是生命周期标签，不代表独立验证过正确性。自动结果评分是启发式判断，可能错误归因。
+- 经验始终只是参考，不能覆盖当前用户请求，不能绕过沙箱或审批。
 
-## 本地测试
-
-在仓库根目录运行：
+## 开发
 
 ```sh
-cd dsh-experience-loop
-node tools/run-tests.mjs
-node tools/smoke.mjs
+# 在仓库根目录执行
+npm test
+npm run smoke
 ```
 
-测试入口在单进程中导入测试集，避免为每个文件创建子进程。冒烟演示使用真实插件入口和**模拟宿主**，不调用模型、不联网。两者都不能替代在实际 DSH 配置档中的集成检查。可用 `DSH_TEST_TMP` 指定测试临时目录。
+冒烟演示使用模拟宿主，不是运行中的 DSH 配置档；测试无需模型或网络调用。
 
-## 隐私边界
+```text
+Dshka/
+├── package.json              # 可安装的 dsh-experience-loop bundle
+├── README.md / README.zh-CN.md
+├── assets/logo/              # 保留原图与尺寸变体，另加腰像
+├── dsh-experience-loop/      # 插件实现；保留旧路径兼容性
+│   ├── index.mjs             # 插件入口
+│   ├── cordis.patch.yml      # Bundle 层
+│   ├── lib/                  # 检索、复盘与存储
+│   ├── test/                 # 测试
+│   └── tools/                # 诊断工具与冒烟演示
+└── docs/                     # 运维文档
+```
 
-- 默认存储位置为 `$DSH_HOME/experience-loop`；未设置 `DSH_HOME` 时为 `$HOME/.dsh/experience-loop`。可通过 `storeRoot` 覆盖。记录、回合证据、审计数据及生成的 Markdown 都是本地文件，**不是加密保险库**。
-- 插件自身不调用模型，但检索记录和技能正文会进入宿主的模型上下文，可能被发送到宿主配置的模型服务商。
-- 基于模式的秘密信息脱敏可以降低意外暴露风险，**不保证匿名化或完整移除所有凭据**。路径、项目名、请求文本和元数据仍可能敏感。共享前应检查存储及导出内容；不要把真实秘密输入脱敏演示。
-- 不要将经验库、会话日志、导出数据、凭据和本地配置档纳入版本控制。忽略规则不会清除已跟踪文件或 Git 历史。
-- 经验仅是参考数据，不授予权限，不覆盖当前用户请求，也不能绕过沙箱或审批边界。
+子目录中的包描述仅为兼容已有本地目录安装而保留；两个入口加载的是**同一个插件**，不是两个产品。新安装请使用仓库根目录。
 
-## 局限
+[重启恢复指南](docs/DSH-restart-recovery.zh.md) · [详细插件文档](dsh-experience-loop/README.zh-CN.md)
 
-关键词检索可能漏掉不同措辞表达的同类问题。重复记录和未解决冲突需要维护。经验提炼依赖代理调用复盘工具，没有后台模型整理器或跨设备同步机制。即使不加载技能，其目录条目仍会增加上下文开销。
+## 许可与素材
 
-`/experience metric` 比较可比重复请求的工具调用次数，需要足够的重复数据。它是观察性诊断指标，**不是受控基准、因果证明或回答质量提升的证据**。
-
-## 仓库结构
-
-- [`dsh-experience-loop/`](dsh-experience-loop/)：插件入口、源码、测试和运维工具。
-- [`dsh-experience-loop/README.md`](dsh-experience-loop/README.md)：详细配置及实现说明。
-- [`dsh-add/`](dsh-add/)：按名字安装 DSH 插件的命令行工具。
-- [`dsh-add/README.zh.md`](dsh-add/README.zh.md)：名字解析、重名消歧与装后验证的做法说明。
-- [`docs/`](docs/)：运维指南。
+代码采用 [MIT](LICENSE)。页头腰像直接裁自原始大图，不重绘、不修改透明通道；点击可查看完整原图，其他尺寸资源也保留。素材单独适用其授权，原始署名来源尚不完整，代码许可不授予图片使用权，详见 [素材说明](assets/logo/README.zh-CN.md)。

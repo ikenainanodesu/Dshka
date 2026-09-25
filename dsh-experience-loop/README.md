@@ -1,5 +1,7 @@
 # dsh-experience-loop
 
+**English** · [简体中文](README.zh-CN.md) · [DSHKA home](../README.md)
+
 A bounded, auditable experience loop for [DeepSeek Harness](https://deepseek-harness.github.io/deepseek-harness/develop/basic/):
 **execute → validate → review → distil → reuse → revise**.
 
@@ -30,9 +32,23 @@ user task
 
 ## Install
 
-### Local checkout
+DSHKA is this plugin's project name, not a separate installer. Use the official command:
 
-Back up your profile patch before editing it. Append an `insert` entry to
+```sh
+dsh plugin --profile web add github:ikenainanodesu/Dshka
+```
+
+For a local checkout, run `dsh plugin --profile web add .` from the repository root.
+The root package exports this directory's implementation and declares its bundle patch.
+The nested package remains only for compatibility with existing local-directory installs.
+Restart the target profile after installation and verify the tools as described below.
+
+### Manual source loading (development only)
+
+Do not combine a manual source row with a bundle install of this plugin. Back up and
+remove an existing manual row when switching to the official bundle install.
+
+`DSH_HOME` defaults to `$HOME/.dsh` when unset. Back up your profile patch before editing it. Append an `insert` entry to
 `<DSH_HOME>/profiles/<profile>/cordis.patch.yml`, replacing the placeholder with
 your checkout path:
 
@@ -48,12 +64,13 @@ For a profile with `patchReload: live`, configuration changes can be picked up
 without a restart. Check reload logs and the effective row; a failed reload may
 leave the previous configuration active.
 
-### Packaged install
+### Legacy local-directory install
 
-The package declares `dsh.bundle` and can be added as a bundle layer:
+The existing subdirectory still declares `dsh.bundle` for compatibility. It loads the
+same plugin as the root package; new installations should use the root instead:
 
 ```sh
-dsh plugin --profile web add <path-to-plugin>
+dsh plugin --profile web add <checkout>/dsh-experience-loop
 ```
 
 ### Verify loading and code activation
