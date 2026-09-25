@@ -2,7 +2,9 @@
 
 [English](README.md) | **简体中文**
 
-DSHKA 仓库包含两个面向 [DeepSeek Harness](https://deepseek-harness.github.io/deepseek-harness/develop/basic/) 的独立工具：
+DSHKA 仓库包含两个面向 [DeepSeek Harness](https://deepseek-harness.github.io/deepseek-harness/develop/basic/) 的独立工具。
+
+<img src="dsh-add/assets/logo/logo-200.png" alt="dsh-add logo：Q 版 DeepSeek 鲸鱼娘捧着一个插件方块" width="150">
 
 | 工具 | 说明 |
 |---|---|

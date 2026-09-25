@@ -2,7 +2,9 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-A DSH workspace holding two independent tools for [DeepSeek Harness](https://deepseek-harness.github.io/deepseek-harness/develop/basic/):
+A DSH workspace holding two independent tools for [DeepSeek Harness](https://deepseek-harness.github.io/deepseek-harness/develop/basic/).
+
+<img src="dsh-add/assets/logo/logo-200.png" alt="dsh-add logo: chibi DeepSeek whale-chan holding one plugin cartridge" width="150">
 
 | Tool | What it is |
 |---|---|
