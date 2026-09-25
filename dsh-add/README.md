@@ -129,17 +129,16 @@ Verification: the protected region (424461 px) has alpha minimum **255**; all 27
 
 **The fade must not be built with a distance transform.** Light regions inside the figure read as paper, so a distance transform measures distance to those interior holes and drags the figure toward translucent — 26.2% partial, against 4.0% for a coordinate ramp.
 
-### Sources and scripts
+### Assets kept in the repository
 
-- **Renders kept for provenance**: `source-watercolor-white.png` (this logo's source, flat white), `source-watercolor-paper.png` (textured paper version), `source-cel-shaded.png` and `source-icon-cel-shaded.png` (the original cel-shaded pair).
-- `contract-watercolor-white.txt` / `contract-icon.txt`: the generation contracts each render came from.
-- `repair_alpha.py`: **the script this logo was built with** — rebuilds alpha from the original render, with the protection polygons and the reviewed component list.
-- `ref-q3.png`: the Q-version proportion-authority reference composed by `build_proportion_ref.py`.
-- `headcount_proof.py`: head-count calibration. `finalize_logo.py`: scaling and size output.
+The repository keeps **only the final artwork** (`logo.png` plus the sizes above). The intermediate renders, the proportion reference, the comparison sheets and the previews have all been deleted; this section says how to regenerate them if ever needed.
+
+- `repair_alpha.py`: **the script this logo was built with**. Its protection polygons and background component IDs are calibrated for *this* 1024×1536 render — a different render needs re-annotation, they do not transfer.
+- `contract-watercolor-white.txt` / `contract-icon.txt`: the generation contracts, to be passed through the highest-priority channel if the artwork is ever regenerated.
+- `finalize_logo.py`: derives 800/400/200 and the square 512/128 builds from `logo.png`.
 
 - Generated through the OpenAI Codex subscription (this project's hard rule: Codex only for image generation; local models take no part).
 - The character is the community fan interpretation "DeepSeek whale-chan", with identity anchors taken from the local `PERSONA.md`. **The character design and artwork belong to their original authors** (CC-BY-NC-SA 4.0): personal use is fine, **commercial use needs separate permission**.
-- Head-to-body ratio measured with `headcount_proof.py`: skull-to-soles ≈ 1050 px over a ≈280 px head, i.e. **about 3.75 heads**. The bundled automatic detector reported 14.15 heads on this image, which is wrong; that reading is discarded and the number above comes from drawn calibration lines checked by eye.
 
 ## License
 

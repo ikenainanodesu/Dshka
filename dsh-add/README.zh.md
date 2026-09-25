@@ -132,17 +132,16 @@ dsh-add --spec ./my-plugin            # 本地开发中的插件，按路径装
 
 **四周渐隐不能用距离变换**：画面内部的浅色区域会被误判成纸，距离场于是测的是"到这些内部洞的距离"，把人物大片压成半透明（实测部分透明 26.2%，改用坐标渐隐后 4.0%）。
 
-### 素材与脚本
+### 仓库内保留的素材
 
-- **生成源图**（保留作溯源）：`source-watercolor-white.png`（本版 logo 的来源，纯白背景）、`source-watercolor-paper.png`（带纹理纸底版）、`source-cel-shaded.png` 与 `source-icon-cel-shaded.png`（最初的赛璐璐风两版）。
-- `contract-watercolor-white.txt` / `contract-icon.txt`：两次出图的生成约束。
-- `repair_alpha.py`：**定稿所用的修复脚本**，从原始渲染直接重建 alpha（含保护多边形与逐块标定）。
-- `ref-q3.png`：用 `build_proportion_ref.py` 合成的 Q 版比例权威图。
-- `headcount_proof.py`：头身比标定脚本。`finalize_logo.py`：缩放与尺寸输出。
+仓库里**只保留定稿图片**（`logo.png` 与上表各尺寸）；生成过程中的原始渲染、参考图、对比图与预览图都已删除，需要时按本节说明重新生成。
+
+- `repair_alpha.py`：**定稿所用的 alpha 重建脚本**。脚本内的保护多边形与背景组件 ID 是按**当前这张** 1024×1536 渲染标定的，换图必须重新标定，不能直接套用。
+- `contract-watercolor-white.txt` / `contract-icon.txt`：两次出图的生成约束，重出图时作为最高优先通道传入。
+- `finalize_logo.py`：由 `logo.png` 输出 800/400/200 与方形 512/128。
 
 - 生成走 OpenAI Codex 订阅（本项目硬规则：出图只用 Codex，本地模型不参与出图）。
 - 角色为社区二创形象「DeepSeek 鲸鱼娘」，身份锚点取自本地 `PERSONA.md`；**角色设计与立绘版权属原作者**（CC-BY-NC-SA 4.0），自用可以，**商用需另行授权**。
-- 头身比用 `headcount_proof.py` 实测：颅顶→脚底约 1050 px，头高约 280 px，**约 3.75 头身**。注意项目自带的自动检测器在这张图上给出 14.15 头身，是错的——该读数已弃用，改为画标定线目视核对后才得出上述数字。
 
 ## 许可
 
